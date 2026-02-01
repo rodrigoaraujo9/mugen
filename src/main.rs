@@ -26,6 +26,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             break;
         }
 
+
+
         for keycode in &keys {
             if !prev_keys.contains(keycode) {
                 if let Some(c) = Key::keycode_to_char(keycode) {
@@ -53,7 +55,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         prev_keys = keys;
-        std::thread::sleep(Duration::from_millis(10));
     }
 
     disable_raw_mode()?;
