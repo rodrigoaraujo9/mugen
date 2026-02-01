@@ -1,6 +1,8 @@
 mod key;
 mod play;
 mod config;
+mod state;
+mod audio_source;
 use play::run;
 
 #[tokio::main]

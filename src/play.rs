@@ -2,14 +2,12 @@ use device_query::{DeviceQuery, DeviceState, Keycode};
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 use rodio::stream::OutputStreamBuilder;
-use rodio::source::{SineWave, Source};
 use rodio::Sink;
 use tokio::time::interval;
 use tokio::signal::ctrl_c;
-
 use crate::config::TICK;
-
 use crate::key::Key;
+use crate::state;
 
 pub struct Play {
     _stream: rodio::OutputStream,
@@ -25,7 +23,7 @@ impl Play {
         })
     }
 
-    pub fn play_note(&mut self, keycode: Keycode) {
+    pub async fn play_note(&mut self, keycode: Keycode) {
         if self.active_sinks.contains_key(&keycode) {
             return;
         }
@@ -33,10 +31,19 @@ impl Play {
         if let Some(key) = Key::from_keycode(keycode) {
             let freq = key.frequency();
             let sink = Sink::connect_new(&self._stream.mixer());
-            let source = SineWave::new(freq)
-                .take_duration(Duration::from_secs(3600))
-                .amplify(0.20);
-            sink.append(source);
+
+            let source = state::get_source().await;
+            let src = source.read().await;
+            let audio_source = src.create_source(freq);
+
+            let volume = state::get_volume().await;
+            sink.set_volume(volume);
+
+            if state::is_paused().await {
+                sink.pause();
+            }
+
+            sink.append(audio_source);
             self.active_sinks.insert(keycode, sink);
         }
     }
@@ -50,6 +57,25 @@ impl Play {
     pub fn stop_all(&mut self) {
         for (_, sink) in self.active_sinks.drain() {
             sink.stop();
+        }
+    }
+
+    pub async fn sync_volume(&mut self) {
+        let volume = state::get_volume().await;
+        for sink in self.active_sinks.values_mut() {
+            sink.set_volume(volume);
+        }
+    }
+
+    pub async fn sync_pause_state(&mut self) {
+        if state::is_paused().await {
+            for sink in self.active_sinks.values_mut() {
+                sink.pause();
+            }
+        } else {
+            for sink in self.active_sinks.values_mut() {
+                sink.play();
+            }
         }
     }
 }
@@ -84,7 +110,7 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 }
 
                 for k in now.difference(&prev) {
-                    audio.play_note(*k);
+                    audio.play_note(*k).await;
                 }
 
                 for k in prev.difference(&now) {
