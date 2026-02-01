@@ -1,17 +1,22 @@
 use device_query::{DeviceQuery, DeviceState, Keycode};
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
-use rodio::stream::OutputStreamBuilder;
+use rodio::stream::{OutputStreamBuilder, OutputStream};
 use rodio::Sink;
-use tokio::time::interval;
 use tokio::signal::ctrl_c;
+use tokio::task;
+use tokio::sync::Notify;
+use std::sync::Arc;
 use crate::config::TICK;
 use crate::key::Key;
 use crate::state;
 
+
 pub struct Play {
-    _stream: rodio::OutputStream,
+    _stream: OutputStream,
     active_sinks: HashMap<Keycode, Sink>,
+    volume_notify: Arc<Notify>,
+    pause_notify: Arc<Notify>,
 }
 
 impl Play {
@@ -20,6 +25,8 @@ impl Play {
         Ok(Self {
             _stream: stream,
             active_sinks: HashMap::new(),
+            volume_notify: Arc::new(Notify::new()),
+            pause_notify: Arc::new(Notify::new()),
         })
     }
 
@@ -31,18 +38,14 @@ impl Play {
         if let Some(key) = Key::from_keycode(keycode) {
             let freq = key.frequency();
             let sink = Sink::connect_new(&self._stream.mixer());
-
             let source = state::get_source().await;
             let src = source.read().await;
             let audio_source = src.create_source(freq);
-
             let volume = state::get_volume().await;
             sink.set_volume(volume);
-
-            if state::is_paused().await {
+            if state::is_muted().await {
                 sink.pause();
             }
-
             sink.append(audio_source);
             self.active_sinks.insert(keycode, sink);
         }
@@ -67,8 +70,8 @@ impl Play {
         }
     }
 
-    pub async fn sync_pause_state(&mut self) {
-        if state::is_paused().await {
+    pub async fn sync_muted_state(&mut self) {
+        if state::is_muted().await {
             for sink in self.active_sinks.values_mut() {
                 sink.pause();
             }
@@ -78,6 +81,14 @@ impl Play {
             }
         }
     }
+
+    pub fn get_volume_notify(&self) -> Arc<Notify> {
+        Arc::clone(&self.volume_notify)
+    }
+
+    pub fn get_muted_notify(&self) -> Arc<Notify> {
+        Arc::clone(&self.pause_notify)
+    }
 }
 
 impl Drop for Play {
@@ -86,41 +97,73 @@ impl Drop for Play {
     }
 }
 
-pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
+pub async fn run_audio() -> Result<(), Box<dyn std::error::Error>> {
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+    let shutdown = Arc::new(Notify::new());
+
+    let poll_handle = task::spawn_blocking(move || {
+        let device_state = DeviceState::new();
+        let mut prev: HashSet<Keycode> = HashSet::new();
+
+        loop {
+            std::thread::sleep(Duration::from_millis(TICK));
+            let now: HashSet<Keycode> = device_state.get_keys().into_iter().collect();
+
+            if now.contains(&Keycode::Escape) ||
+               (now.contains(&Keycode::C) && now.contains(&Keycode::LControl)) {
+                let _ = tx.send(None);
+                break;
+            }
+
+            if now != prev {
+                if tx.send(Some((now.clone(), prev.clone()))).is_err() {
+                    break;
+                }
+                prev = now;
+            }
+        }
+    });
+
     let mut audio = Play::new()?;
-    let device_state = DeviceState::new();
-    let mut prev: HashSet<Keycode> = HashSet::new();
-    let mut tick = interval(Duration::from_millis(TICK));
+    let volume_notify = audio.get_volume_notify();
+    let pause_notify = audio.get_muted_notify();
+
+    state::set_volume_notify(volume_notify).await;
+    state::set_mute_notify(pause_notify).await;
+
     let ctrl_c = ctrl_c();
     tokio::pin!(ctrl_c);
 
     loop {
         tokio::select! {
-            _ = &mut ctrl_c => break,
-            _ = tick.tick() => {
-                let now: HashSet<Keycode> = device_state.get_keys().into_iter().collect();
-
-                if now.contains(&Keycode::Escape) ||
-                   (now.contains(&Keycode::C) && now.contains(&Keycode::LControl)) {
-                    break;
+            _ = &mut ctrl_c => {
+                shutdown.notify_one();
+                break;
+            }
+            msg = rx.recv() => {
+                match msg {
+                    Some(Some((now, prev))) => {
+                        for k in now.difference(&prev) {
+                            audio.play_note(*k).await;
+                        }
+                        for k in prev.difference(&now) {
+                            audio.stop_note(*k);
+                        }
+                    }
+                    Some(None) | None => break,
                 }
-
-                if now == prev {
-                    continue;
-                }
-
-                for k in now.difference(&prev) {
-                    audio.play_note(*k).await;
-                }
-
-                for k in prev.difference(&now) {
-                    audio.stop_note(*k);
-                }
-
-                prev = now;
+            }
+            _ = audio.volume_notify.notified() => {
+                audio.sync_volume().await;
+            }
+            _ = audio.pause_notify.notified() => {
+                audio.sync_muted_state().await;
             }
         }
     }
+
+    audio.stop_all();
+    let _ = poll_handle.await;
 
     Ok(())
 }

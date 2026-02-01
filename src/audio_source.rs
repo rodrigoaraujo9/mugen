@@ -1,5 +1,5 @@
 use rodio::Source;
-use rodio::source::SineWave;
+use rodio::source::{SineWave};
 use std::time::Duration;
 
 pub trait AudioSource: Send + Sync {
@@ -7,12 +7,12 @@ pub trait AudioSource: Send + Sync {
     fn name(&self) -> &'static str;
 }
 
-pub struct SineSource {
+pub struct WaveSource {
     pub amplitude: f32,
     pub duration: Duration,
 }
 
-impl SineSource {
+impl WaveSource {
     pub fn new(amplitude: f32) -> Self {
         Self {
             amplitude,
@@ -21,13 +21,13 @@ impl SineSource {
     }
 }
 
-impl Default for SineSource {
+impl Default for WaveSource {
     fn default() -> Self {
         Self::new(0.20)
     }
 }
 
-impl AudioSource for SineSource {
+impl AudioSource for WaveSource {
     fn create_source(&self, frequency: f32) -> Box<dyn Source<Item = f32> + Send> {
         Box::new(
             SineWave::new(frequency)
