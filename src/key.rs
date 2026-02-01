@@ -1,8 +1,6 @@
 use fundsp::math::pow;
-use device_query::Keycode;
 
-
-pub const BASE_FREQ:f32 = 440.0; //base frequency in Hz-> A4
+pub const BASE_FREQ: f32 = 440.0; //base frequency in Hz-> A4
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Note {
@@ -45,7 +43,7 @@ impl Note {
 }
 
 pub struct Key {
-    note: Note, // 1 for C or 9 for Ab for example
+    note: Note,  // 1 for C or 9 for Ab for example
     octave: i32, // corresponding mapping on keyboard (ex: 4 -> Ab4)
 }
 
@@ -67,7 +65,6 @@ impl Key {
         let a4_semitones = 4 * 12 + 9; // A4 is at semitone 57
         let this_semitones = self.octave * 12 + self.note.semitone() as i32;
         let diff = this_semitones - a4_semitones;
-
         BASE_FREQ * pow(2.0, diff as f32 / 12.0)
     }
 
@@ -84,7 +81,6 @@ impl Key {
             'l' => Some(Key::new(Note::D, 5)),
             ';' => Some(Key::new(Note::E, 5)),
             '\'' => Some(Key::new(Note::F, 5)),
-
             'w' => Some(Key::new(Note::Db, 4)),
             'e' => Some(Key::new(Note::Eb, 4)),
             't' => Some(Key::new(Note::Gb, 4)),
@@ -92,40 +88,7 @@ impl Key {
             'u' => Some(Key::new(Note::Bb, 4)),
             'o' => Some(Key::new(Note::Db, 5)),
             'p' => Some(Key::new(Note::Eb, 5)),
-
             _ => None,
         }
-    }
-}
-
-pub fn keycode_to_char(keycode: &Keycode) -> Option<char> {
-    match keycode {
-        Keycode::A => Some('a'),
-        Keycode::B => Some('b'),
-        Keycode::C => Some('c'),
-        Keycode::D => Some('d'),
-        Keycode::E => Some('e'),
-        Keycode::F => Some('f'),
-        Keycode::G => Some('g'),
-        Keycode::H => Some('h'),
-        Keycode::I => Some('i'),
-        Keycode::J => Some('j'),
-        Keycode::K => Some('k'),
-        Keycode::L => Some('l'),
-        Keycode::M => Some('m'),
-        Keycode::N => Some('n'),
-        Keycode::O => Some('o'),
-        Keycode::P => Some('p'),
-        Keycode::Q => Some('q'),
-        Keycode::R => Some('r'),
-        Keycode::S => Some('s'),
-        Keycode::T => Some('t'),
-        Keycode::U => Some('u'),
-        Keycode::V => Some('v'),
-        Keycode::W => Some('w'),
-        Keycode::X => Some('x'),
-        Keycode::Y => Some('y'),
-        Keycode::Z => Some('z'),
-        _ => None,
     }
 }

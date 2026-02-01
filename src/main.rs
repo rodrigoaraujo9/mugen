@@ -4,8 +4,12 @@ use rodio::{OutputStreamBuilder, Sink};
 use rodio::source::{SineWave, Source};
 use device_query::{DeviceQuery, DeviceState, Keycode};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
+
 mod key;
-use key::{Key, keycode_to_char};
+use key::{Key};
+
+mod input;
+use input::keycode_to_char;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let stream_handle = OutputStreamBuilder::open_default_stream()
