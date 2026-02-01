@@ -1,5 +1,5 @@
 use rodio::Source;
-use rodio::source::{SineWave};
+use rodio::source::{SawtoothWave, SineWave};
 use std::time::Duration;
 use crate::config::AMP_DEFAULT;
 

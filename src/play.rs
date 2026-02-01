@@ -10,23 +10,25 @@ use std::sync::Arc;
 use crate::config::TICK;
 use crate::key::Key;
 use crate::state;
-
+use crate::audio_capture::AudioCapture;
 
 pub struct Play {
     _stream: OutputStream,
     active_sinks: HashMap<Keycode, Sink>,
     volume_notify: Arc<Notify>,
     pause_notify: Arc<Notify>,
+    pub audio_capture: Arc<AudioCapture>,
 }
 
 impl Play {
-    pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(channels: usize, buffer_size: usize, sample_rate: u32) -> Result<Self, Box<dyn std::error::Error>> {
         let stream = OutputStreamBuilder::open_default_stream()?;
         Ok(Self {
             _stream: stream,
             active_sinks: HashMap::new(),
             volume_notify: Arc::new(Notify::new()),
             pause_notify: Arc::new(Notify::new()),
+            audio_capture: Arc::new(AudioCapture::new(channels, buffer_size, sample_rate)),
         })
     }
 
@@ -41,12 +43,16 @@ impl Play {
             let source = state::get_source().await;
             let src = source.read().await;
             let audio_source = src.create_source(freq);
+
+            let channels = audio_source.channels() as usize;
+            let tapped_source = self.audio_capture.create_tap_source(audio_source, channels);
+
             let volume = state::get_volume().await;
             sink.set_volume(volume);
             if state::is_muted().await {
                 sink.pause();
             }
-            sink.append(audio_source);
+            sink.append(tapped_source);
             self.active_sinks.insert(keycode, sink);
         }
     }
@@ -89,6 +95,10 @@ impl Play {
     pub fn get_muted_notify(&self) -> Arc<Notify> {
         Arc::clone(&self.pause_notify)
     }
+
+    pub fn get_audio_capture(&self) -> Arc<AudioCapture> {
+        Arc::clone(&self.audio_capture)
+    }
 }
 
 impl Drop for Play {
@@ -124,12 +134,14 @@ pub async fn run_audio() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    let mut audio = Play::new()?;
+    let mut audio = Play::new(2, 2048, 48000)?;
     let volume_notify = audio.get_volume_notify();
     let pause_notify = audio.get_muted_notify();
+    let audio_capture = audio.get_audio_capture();
 
     state::set_volume_notify(volume_notify).await;
     state::set_mute_notify(pause_notify).await;
+    state::set_audio_capture(audio_capture).await;
 
     let ctrl_c = ctrl_c();
     tokio::pin!(ctrl_c);

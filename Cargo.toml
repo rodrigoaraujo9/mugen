@@ -10,4 +10,5 @@ device_query = "4.0.1"
 fundsp = "0.23.0"
 ratatui = "0.30.0"
 rodio = "0.21.1"
+rustfft = "6.4.1"
 tokio = {version ="1.49.0", features = ["full"]}

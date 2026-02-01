@@ -1,13 +1,17 @@
 use tokio::sync::{RwLock, OnceCell, Notify};
 use std::sync::Arc;
 use crate::audio_source::{AudioSource, WaveSource};
+use crate::audio_capture::AudioCapture;
+
 pub struct AudioState {
     source: Arc<RwLock<Box<dyn AudioSource>>>,
     volume: Arc<RwLock<f32>>,
     paused: Arc<RwLock<bool>>,
     volume_notify: Arc<RwLock<Option<Arc<Notify>>>>,
     pause_notify: Arc<RwLock<Option<Arc<Notify>>>>,
+    audio_capture: Arc<RwLock<Option<Arc<AudioCapture>>>>,
 }
+
 impl AudioState {
     fn new() -> Self {
         Self {
@@ -16,18 +20,23 @@ impl AudioState {
             paused: Arc::new(RwLock::new(false)),
             volume_notify: Arc::new(RwLock::new(None)),
             pause_notify: Arc::new(RwLock::new(None)),
+            audio_capture: Arc::new(RwLock::new(None)),
         }
     }
+
     pub fn get_source(&self) -> Arc<RwLock<Box<dyn AudioSource>>> {
         Arc::clone(&self.source)
     }
+
     pub async fn set_source(&self, new_source: Box<dyn AudioSource>) {
         let mut source = self.source.write().await;
         *source = new_source;
     }
+
     pub async fn get_volume(&self) -> f32 {
         *self.volume.read().await
     }
+
     pub async fn set_volume(&self, vol: f32) {
         let clamped = vol.clamp(0.0, 1.0);
         let mut volume = self.volume.write().await;
@@ -37,9 +46,11 @@ impl AudioState {
             notify.notify_one();
         }
     }
+
     pub async fn is_muted(&self) -> bool {
         *self.paused.read().await
     }
+
     pub async fn set_muted(&self, paused: bool) {
         let mut p = self.paused.write().await;
         *p = paused;
@@ -48,6 +59,7 @@ impl AudioState {
             notify.notify_one();
         }
     }
+
     pub async fn toggle_muted(&self) -> bool {
         let mut p = self.paused.write().await;
         *p = !*p;
@@ -58,43 +70,73 @@ impl AudioState {
         }
         new_state
     }
+
     pub async fn set_volume_notify(&self, notify: Arc<Notify>) {
         let mut vn = self.volume_notify.write().await;
         *vn = Some(notify);
     }
+
     pub async fn set_muted_notify(&self, notify: Arc<Notify>) {
         let mut pn = self.pause_notify.write().await;
         *pn = Some(notify);
     }
+
+    pub async fn set_audio_capture(&self, capture: Arc<AudioCapture>) {
+        let mut ac = self.audio_capture.write().await;
+        *ac = Some(capture);
+    }
+
+    pub async fn get_audio_capture(&self) -> Option<Arc<AudioCapture>> {
+        self.audio_capture.read().await.clone()
+    }
 }
+
 static AUDIO_STATE: OnceCell<AudioState> = OnceCell::const_new();
+
 async fn get_audio_state() -> &'static AudioState {
     AUDIO_STATE.get_or_init(|| async { AudioState::new() }).await
 }
+
 pub async fn get_source() -> Arc<RwLock<Box<dyn AudioSource>>> {
     get_audio_state().await.get_source()
 }
+
 pub async fn set_source(source: Box<dyn AudioSource>) {
     get_audio_state().await.set_source(source).await;
 }
+
 pub async fn get_volume() -> f32 {
     get_audio_state().await.get_volume().await
 }
+
 pub async fn set_volume(volume: f32) {
     get_audio_state().await.set_volume(volume).await;
 }
+
 pub async fn is_muted() -> bool {
     get_audio_state().await.is_muted().await
 }
+
 pub async fn set_muted(paused: bool) {
     get_audio_state().await.set_muted(paused).await;
 }
+
 pub async fn toggle_mute() -> bool {
     get_audio_state().await.toggle_muted().await
 }
+
 pub async fn set_volume_notify(notify: Arc<Notify>) {
     get_audio_state().await.set_volume_notify(notify).await;
 }
+
 pub async fn set_mute_notify(notify: Arc<Notify>) {
     get_audio_state().await.set_muted_notify(notify).await;
+}
+
+pub async fn set_audio_capture(capture: Arc<AudioCapture>) {
+    get_audio_state().await.set_audio_capture(capture).await;
+}
+
+pub async fn get_audio_capture() -> Option<Arc<AudioCapture>> {
+    get_audio_state().await.get_audio_capture().await
 }

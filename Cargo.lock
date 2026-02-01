@@ -2124,6 +2124,7 @@ dependencies = [
  "fundsp",
  "ratatui",
  "rodio",
+ "rustfft",
  "tokio",
 ]
 
