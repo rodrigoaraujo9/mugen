@@ -1,18 +1,19 @@
 use device_query::{DeviceQuery, DeviceState, Keycode};
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 use rodio::stream::OutputStreamBuilder;
-use rodio::Sink;
 use rodio::source::{SineWave, Source};
+use rodio::Sink;
+use tokio::time::interval;
+use tokio::signal::ctrl_c;
+
+use crate::config::TICK;
 
 use crate::key::Key;
-use crate::input::keycode_to_char;
-
 
 pub struct Play {
     _stream: rodio::OutputStream,
-    active_sinks: HashMap<char, Sink>,
+    active_sinks: HashMap<Keycode, Sink>,
 }
 
 impl Play {
@@ -24,25 +25,24 @@ impl Play {
         })
     }
 
-    pub fn play_note(&mut self, c: char) {
-        if self.active_sinks.contains_key(&c) {
+    pub fn play_note(&mut self, keycode: Keycode) {
+        if self.active_sinks.contains_key(&keycode) {
             return;
         }
 
-        if let Some(key) = Key::from_keycode(c) {
+        if let Some(key) = Key::from_keycode(keycode) {
             let freq = key.frequency();
-
             let sink = Sink::connect_new(&self._stream.mixer());
             let source = SineWave::new(freq)
                 .take_duration(Duration::from_secs(3600))
                 .amplify(0.20);
             sink.append(source);
-            self.active_sinks.insert(c, sink);
+            self.active_sinks.insert(keycode, sink);
         }
     }
 
-    pub fn stop_note(&mut self, c: char) {
-        if let Some(sink) = self.active_sinks.remove(&c) {
+    pub fn stop_note(&mut self, keycode: Keycode) {
+        if let Some(sink) = self.active_sinks.remove(&keycode) {
             sink.stop();
         }
     }
@@ -60,41 +60,41 @@ impl Drop for Play {
     }
 }
 
-pub fn run() -> Result<(), Box<dyn std::error::Error>> {
+pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut audio = Play::new()?;
     let device_state = DeviceState::new();
-    let mut prev_keys: Vec<Keycode> = vec![];
-
-    enable_raw_mode()?;
+    let mut prev: HashSet<Keycode> = HashSet::new();
+    let mut tick = interval(Duration::from_millis(TICK));
+    let ctrl_c = ctrl_c();
+    tokio::pin!(ctrl_c);
 
     loop {
-        let keys = device_state.get_keys();
+        tokio::select! {
+            _ = &mut ctrl_c => break,
+            _ = tick.tick() => {
+                let now: HashSet<Keycode> = device_state.get_keys().into_iter().collect();
 
-        if keys.contains(&Keycode::Escape) ||
-           (keys.contains(&Keycode::C) && keys.contains(&Keycode::LControl)) {
-            break;
-        }
-
-        for keycode in &keys {
-            if !prev_keys.contains(keycode) {
-                if let Some(c) = keycode_to_char(keycode) {
-                    audio.play_note(c);
+                if now.contains(&Keycode::Escape) ||
+                   (now.contains(&Keycode::C) && now.contains(&Keycode::LControl)) {
+                    break;
                 }
+
+                if now == prev {
+                    continue;
+                }
+
+                for k in now.difference(&prev) {
+                    audio.play_note(*k);
+                }
+
+                for k in prev.difference(&now) {
+                    audio.stop_note(*k);
+                }
+
+                prev = now;
             }
         }
-
-        for keycode in &prev_keys {
-            if !keys.contains(keycode) {
-                if let Some(c) = keycode_to_char(keycode) {
-                    audio.stop_note(c);
-                }
-            }
-        }
-
-        prev_keys = keys;
     }
-
-    disable_raw_mode()?;
 
     Ok(())
 }

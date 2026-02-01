@@ -1,3 +1,24 @@
+--------- impl ---------
+next step -> implement 1 sink per sound with dynamic mixer, etc instead of multiple sinks
+ratatui ui with -> keyboard at bottom -> support for actual computer keyboard and midi player
+                -> configurable nobs for procedural cool shit (unison, detune, LFO,
+                    portamento/glide, sustain, attack, decay, release, poly/mono, waveform,
+                    effects(phaser,reverb,distortion,flanger))
+                -> cool visualizers -> waveform / volume / whatever is interesting
+later:
+add playback and drop in of wav files
+add record button
+
+
+
+
+
+
+
+
+
+
+
 CLI app that allows to play live with friends p2p fashion encrypted distributed
 all hear what all are playing like a band
 each can synthesize sounds and bind them to keys and play

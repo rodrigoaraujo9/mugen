@@ -1,8 +1,9 @@
 mod key;
-mod input;
 mod play;
-use play::{run};
+mod config;
+use play::run;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    run()
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    run().await
 }
