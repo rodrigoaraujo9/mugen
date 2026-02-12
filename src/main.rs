@@ -3,7 +3,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 
-use synth_rs::{play::run_audio, state::get_handle, ui::run_ui};
+use synth_rs::{play::run_audio, audio_system::get_handle, ui::run_ui};
 use tokio::sync::watch;
 
 #[tokio::main]

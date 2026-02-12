@@ -14,7 +14,7 @@ use tokio::{signal::ctrl_c, task};
 use crate::config::TICK;
 use crate::key::Key;
 use crate::patches::basic::{basic_source, BasicKind};
-use crate::state;
+use crate::audio_system;
 
 pub struct PlayState {
     pub stream: OutputStream,
@@ -61,8 +61,8 @@ struct RuntimeState {
     kind: BasicKind,
 }
 
-fn publish_snapshot(tx: &tokio::sync::watch::Sender<state::AudioSnapshot>, rt: RuntimeState) {
-    let _ = tx.send(state::AudioSnapshot {
+fn publish_snapshot(tx: &tokio::sync::watch::Sender<audio_system::AudioSnapshot>, rt: RuntimeState) {
+    let _ = tx.send(audio_system::AudioSnapshot {
         volume: rt.volume,
         muted: rt.muted,
         kind: rt.kind,
@@ -99,8 +99,8 @@ pub async fn run_audio(
     mut shutdown: tokio::sync::watch::Receiver<bool>,
     focused: Arc<AtomicBool>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let _handle = state::get_handle().await.clone();
-    let (mut cmd_rx, snapshot_tx, initial) = state::take_runtime_channels().await;
+    let _handle = audio_system::get_handle().await.clone();
+    let (mut cmd_rx, snapshot_tx, initial) = audio_system::take_runtime_channels().await;
 
     let mut rt = RuntimeState {
         volume: initial.volume,
@@ -134,7 +134,6 @@ pub async fn run_audio(
 
             let is_focused = focused_bg.load(Ordering::Relaxed);
 
-            // Focus lost: stop everything once, then ignore input while unfocused.
             if !is_focused {
                 if was_focused {
                     if !prev.is_empty() {
@@ -208,22 +207,22 @@ pub async fn run_audio(
                 let Some(cmd) = cmd else { break; };
 
                 match cmd {
-                    state::AudioCommand::SetVolume(v) => {
+                    audio_system::AudioCommand::SetVolume(v) => {
                         rt.volume = v.clamp(0.0, 2.0);
                         play_state.set_all_volume(rt.volume);
                         publish_snapshot(&snapshot_tx, rt);
                     }
-                    state::AudioCommand::SetMuted(m) => {
+                    audio_system::AudioCommand::SetMuted(m) => {
                         rt.muted = m;
                         play_state.set_all_muted(rt.muted);
                         publish_snapshot(&snapshot_tx, rt);
                     }
-                    state::AudioCommand::ToggleSource => {
+                    audio_system::AudioCommand::ToggleSource => {
                         rt.kind = rt.kind.next();
                         publish_snapshot(&snapshot_tx, rt);
                         restart_active_notes(&mut play_state, &rt).await;
                     }
-                    state::AudioCommand::SetSource(kind) => {
+                    audio_system::AudioCommand::SetSource(kind) => {
                         rt.kind = kind;
                         publish_snapshot(&snapshot_tx, rt);
                         restart_active_notes(&mut play_state, &rt).await;

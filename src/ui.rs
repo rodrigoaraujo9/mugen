@@ -22,7 +22,7 @@ use ratatui::{
 };
 use tokio::sync::{watch, mpsc};
 
-use crate::state::AudioHandle;
+use crate::audio_system::AudioHandle;
 
 struct TuiGuard;
 
