@@ -5,3 +5,4 @@ pub mod audio_system;
 pub mod audio_patch;
 pub mod ui;
 pub mod patches;
+pub mod fx;
