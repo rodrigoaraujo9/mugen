@@ -53,10 +53,8 @@ pub struct AdsrSource {
     adsr: Adsr,
     sample_rate: u32,
     gate: Gate,
-
     stage: Stage,
     stage_pos: u64,
-
     current_amp: f32,
     release_start_amp: f32,
 }
