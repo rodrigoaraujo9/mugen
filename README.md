@@ -79,6 +79,7 @@ A **CLI synth you can jam with friends**.
 - Everyone hears what everyone plays (like a band)
 - Each player can bind sounds to keys
 - Record the whole session to WAV
+- Choose a key and only allow to play notes that belong to it
 
 ### Architecture idea
 
