@@ -9,6 +9,7 @@ Right now it focuses on:
 - real-time sound generation
 - polyphonic playing
 - switching sound character while notes are held
+- adsr manipulation (hardcoded to amp)
 
 ## Available waveforms
 
