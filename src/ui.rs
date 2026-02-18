@@ -1,5 +1,4 @@
 // mock ui for now with logo
-
 use std::io;
 use std::io::stdout;
 use std::sync::{
@@ -78,8 +77,19 @@ pub async fn run_ui(
         }
     });
 
+    let ui_start = std::time::Instant::now();
+    let mut show_intro = true;
+
     loop {
-        terminal.draw(draw_ui)?;
+        if show_intro && ui_start.elapsed() >= Duration::from_secs(1) {
+            show_intro = false;
+        }
+
+        if show_intro {
+            terminal.draw(draw_intro)?;
+        } else {
+            terminal.draw(draw_ui)?;
+        }
 
         tokio::select! {
             k = key_rx.recv() => {
@@ -103,7 +113,7 @@ pub async fn run_ui(
     Ok(())
 }
 
-fn draw_ui(f: &mut ratatui::Frame) {
+fn draw_intro(f: &mut ratatui::Frame) {
     let art: [&str; 23] = [
         r"          _____                    _____                    _____                    _____                    _____          ",
         r"         /\    \                  /\    \                  /\    \                  /\    \                  /\    \         ",
@@ -172,4 +182,11 @@ fn draw_ui(f: &mut ratatui::Frame) {
     };
 
     f.render_widget(widget, centered);
+}
+
+fn draw_ui(f: &mut ratatui::Frame) {
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" mugen ");
+    f.render_widget(block, f.area());
 }
