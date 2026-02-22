@@ -9,7 +9,8 @@ pub trait AudioSource: Send + Sync {
     fn name(&self) -> &'static str;
 }
 
-/// an effect/processor that transforms one source into another (filter, gain, ADSR, etc).
+/// an effect/processor that transforms one source into another (filter, gain, ADSR, etc)
+/// nodes may own a target node they drive internally (e.g. AdsrNode wrapping Gain)
 pub trait Node: Send + Sync {
     fn apply(&self, input: SynthSource) -> SynthSource;
     fn name(&self) -> &'static str;
@@ -46,7 +47,6 @@ impl AudioSource for PatchSource {
         }
         src
     }
-
     fn name(&self) -> &'static str {
         self.generator.name()
     }

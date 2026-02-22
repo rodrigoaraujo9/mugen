@@ -14,10 +14,10 @@ pub type Gate = Arc<AtomicBool>;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Adsr {
-    pub attack_s: f32,
-    pub decay_s: f32,
-    pub sustain: f32,
-    pub release_s: f32,
+    pub attack_s: f32, //sec
+    pub decay_s: f32, //sec
+    pub sustain: f32, //0..1
+    pub release_s: f32, //sec
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -25,7 +25,8 @@ pub struct AdsrEnvelope {
     pub sustain: f32,
     pub attack_step: f32,
     pub decay_step: f32,
-    pub release_samples: f32,
+    pub release_step: f32,
+    pub release_samples: f32, // needed to calc release samples (given current amp early release)
 }
 
 impl Adsr {
@@ -46,6 +47,7 @@ impl Adsr {
             sustain,
             attack_step: 1.0 / attack_samples,
             decay_step: (1.0 - sustain) / decay_samples,
+            release_step: sustain / release_samples,
             release_samples,
         }
     }
@@ -73,7 +75,6 @@ pub struct AdsrSource {
     sample_rate: u32,
     stage: Stage,
     current_amp: f32,
-    release_step: f32,
 }
 
 impl AdsrSource {
@@ -85,13 +86,7 @@ impl AdsrSource {
             sample_rate,
             stage: Stage::Attack,
             current_amp: 0.0,
-            release_step: 0.0,
         }
-    }
-
-    fn enter_release(&mut self) {
-        self.stage = Stage::Release;
-        self.release_step = self.current_amp / self.envelope.release_samples.max(1.0);
     }
 
     fn step_envelope(&mut self) -> f32 {
@@ -99,7 +94,8 @@ impl AdsrSource {
             && self.stage != Stage::Release
             && self.stage != Stage::Done
         {
-            self.enter_release();
+            self.stage = Stage::Release;
+            self.envelope.release_step=self.current_amp/self.envelope.release_samples;
         }
 
         match self.stage {
@@ -121,7 +117,7 @@ impl AdsrSource {
                 self.current_amp = self.envelope.sustain;
             }
             Stage::Release => {
-                self.current_amp -= self.release_step;
+                self.current_amp -= self.envelope.release_step;
                 if self.current_amp <= 0.0 {
                     self.current_amp = 0.0;
                     self.stage = Stage::Done;
