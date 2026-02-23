@@ -362,31 +362,48 @@ fn draw_intro(f: &mut ratatui::Frame) {
     let inner = outer.inner(area);
     f.render_widget(outer, area);
 
-    if inner.width < max_w as u16 {
-        let msg = Paragraph::new("terminal too small")
-            .alignment(Alignment::Center)
-            .wrap(Wrap { trim: false })
-            .style(Style::default().fg(kdr::FG).bg(kdr::BG0));
-        f.render_widget(msg, inner);
-        return;
-    }
-
-    let widget = Paragraph::new(lines)
-        .alignment(Alignment::Center)
-        .wrap(Wrap { trim: false })
-        .style(Style::default().fg(kdr::FG).bg(kdr::BG0));
+    // if inner.width < max_w as u16 {
+    //     let msg = Paragraph::new("terminal too small")
+    //         .alignment(Alignment::Center)
+    //         .wrap(Wrap { trim: false })
+    //         .style(Style::default().fg(kdr::FG).bg(kdr::BG0));
+    //     f.render_widget(msg, inner);
+    //     return;
+    // }
 
     let total_h = art.len() as u16;
+    let main_lines: Vec<Line> = lines.into_iter().take((total_h - 1) as usize).collect();
+    let synthesis_line = Line::from(Span::styled(
+        "s y n t h e s i s",
+        Style::default().fg(kdr::ORANGE).bold(),
+    ));
+
     let y = inner.y + (inner.height.saturating_sub(total_h)) / 2;
 
-    let centered = Rect {
+    let main_area = Rect {
         x: inner.x,
         y,
         width: inner.width,
-        height: total_h.min(inner.height),
+        height: (total_h - 1).min(inner.height),
     };
+    f.render_widget(
+        Paragraph::new(main_lines)
+            .alignment(Alignment::Center)
+            .wrap(Wrap { trim: false })
+            .style(Style::default().fg(kdr::FG).bg(kdr::BG0)),
+        main_area,
+    );
 
-    f.render_widget(widget, centered);
+    let synth_y = y + total_h - 1;
+    if synth_y < inner.y + inner.height {
+        let synth_area = Rect { x: inner.x, y: synth_y, width: inner.width, height: 1 };
+        f.render_widget(
+            Paragraph::new(vec![synthesis_line])
+                .alignment(Alignment::Center)
+                .style(Style::default().bg(kdr::BG0)),
+            synth_area,
+        );
+    }
 }
 
 fn draw_ui(f: &mut ratatui::Frame, ui: &UiState) {
@@ -395,7 +412,7 @@ fn draw_ui(f: &mut ratatui::Frame, ui: &UiState) {
 
     let outer = Block::default()
         .borders(Borders::ALL)
-        .title(Span::styled(" mugen ", Style::default().fg(kdr::ORANGE).bold()))
+        // .title(Span::styled(" mugen ", Style::default().fg(kdr::ORANGE).bold()))
         .border_style(Style::default().fg(kdr::BORDER))
         .style(Style::default().bg(kdr::BG0).fg(kdr::FG));
 
