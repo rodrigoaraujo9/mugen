@@ -708,7 +708,6 @@ fn draw_bottom(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
 
     let buf = f.buffer_mut();
 
-    // Clear the inner piano region to terminal background (no colored blocks)
     for row in 0..white_h {
         for col in 0..used_w {
             let x = (x0 + col) as u16;
@@ -721,67 +720,105 @@ fn draw_bottom(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
         }
     }
 
-    let line_dim = Style::default().fg(kdr::BORDER).bg(kdr::BG0);
-    let line_strong = Style::default().fg(kdr::FG).bg(kdr::BG0);
+    let edge_orange = Style::default().fg(kdr::ORANGE).bg(kdr::BG0);
+    let sep_norm = Style::default().fg(kdr::BORDER).bg(kdr::BG0);
 
-    // White keys: draw outlines/separators (no fill). Pressed = orange lines + label.
-    for (i, wk) in white_keys.iter().enumerate() {
-        let p = is_pressed(&wk.code);
-        let x_start = x0 + i * white_w;
+    let top_y = area.y;
+    let bot_y = area.y + area.height - 1;
+    let left_border_x = area.x;
+    let right_border_x = area.x + area.width - 1;
 
-        let line = if p {
-            Style::default().fg(kdr::ORANGE).bg(kdr::BG0)
-        } else {
-            line_strong
-        };
+    let sep_x = |i_boundary: usize| -> u16 { (x0 + (i_boundary + 1) * white_w - 1) as u16 };
 
-        let label_style = if p {
-            Style::default().fg(kdr::ORANGE).bold().bg(kdr::BG0)
-        } else {
-            Style::default().fg(kdr::FG).bg(kdr::BG0)
-        };
+    for i in 0..(n_white - 1) {
+        let x = sep_x(i);
+        if x <= left_border_x || x >= right_border_x {
+            continue;
+        }
 
-        let left_x = x_start as u16;
-        let right_x = (x_start + white_w - 1) as u16;
+        let left_p = is_pressed(&white_keys[i].code);
+        let right_p = is_pressed(&white_keys[i + 1].code);
 
-        // left border only for first key
-        if i == 0 {
-            for row in 0..white_h {
-                let y = inner.y + row as u16;
-                if left_x >= inner.x && left_x < inner.x + inner.width && y < inner.y + inner.height {
-                    buf[(left_x, y)].set_char('│').set_style(line);
+        let st_inside = if left_p || right_p { edge_orange } else { sep_norm };
+        for y in inner.y..(inner.y + inner.height) {
+            buf[(x, y)].set_char('│').set_style(st_inside);
+        }
+
+        match (left_p, right_p) {
+            (false, false) => {
+                buf[(x, top_y)].set_char('┬').set_style(sep_norm);
+                buf[(x, bot_y)].set_char('┴').set_style(sep_norm);
+            }
+            (true, false) => {
+                buf[(x, top_y)].set_char('┐').set_style(edge_orange);
+                buf[(x, bot_y)].set_char('┘').set_style(edge_orange);
+            }
+            (false, true) => {
+                buf[(x, top_y)].set_char('┌').set_style(edge_orange);
+                buf[(x, bot_y)].set_char('└').set_style(edge_orange);
+            }
+            (true, true) => {
+                buf[(x, top_y)].set_char('┬').set_style(sep_norm);
+                buf[(x, bot_y)].set_char('┴').set_style(sep_norm);
+            }
+        }
+    }
+
+    for i in 0..n_white {
+        if !is_pressed(&white_keys[i].code) {
+            continue;
+        }
+
+        let x_left_edge = if i == 0 { left_border_x } else { sep_x(i - 1) };
+        let x_right_edge = if i == n_white - 1 { right_border_x } else { sep_x(i) };
+
+        let start = x_left_edge.saturating_add(1);
+        let end_excl = x_right_edge;
+        if start < end_excl {
+            for x in start..end_excl {
+                if x > left_border_x && x < right_border_x {
+                    buf[(x, top_y)].set_char('─').set_style(edge_orange);
+                    buf[(x, bot_y)].set_char('─').set_style(edge_orange);
                 }
             }
         }
 
-        // right border for each key
-        for row in 0..white_h {
-            let y = inner.y + row as u16;
-            if right_x >= inner.x && right_x < inner.x + inner.width && y < inner.y + inner.height {
-                let st = if i == n_white - 1 { line } else { line_dim };
-                buf[(right_x, y)].set_char('│').set_style(st);
+        if i == 0 {
+            for y in (top_y + 1)..bot_y {
+                buf[(left_border_x, y)].set_style(edge_orange);
             }
+            buf[(left_border_x, top_y)].set_char('┌').set_style(edge_orange);
+            buf[(left_border_x, bot_y)].set_char('└').set_style(edge_orange);
         }
 
-        // bottom edge (leave the label cell free)
-        let yb = inner.y + (white_h - 1) as u16;
-        for col in 0..white_w {
-            let x = (x_start + col) as u16;
-            if x >= inner.x && x < inner.x + inner.width && yb < inner.y + inner.height {
-                buf[(x, yb)].set_char('─').set_style(line_dim);
+        if i == n_white - 1 {
+            for y in (top_y + 1)..bot_y {
+                buf[(right_border_x, y)].set_style(edge_orange);
             }
-        }
-
-        // label centered on bottom row
-        let lx = (x_start + white_w / 2) as u16;
-        if lx >= inner.x && lx < inner.x + inner.width && yb < inner.y + inner.height {
-            buf[(lx, yb)]
-                .set_char(wk.label.chars().next().unwrap_or(' '))
-                .set_style(label_style);
+            buf[(right_border_x, top_y)].set_char('┐').set_style(edge_orange);
+            buf[(right_border_x, bot_y)].set_char('┘').set_style(edge_orange);
         }
     }
 
-    // Black keys: draw white-ish outlines on terminal bg (no filled blocks).
+    let label_y = inner.y + inner.height - 1;
+    for (i, wk) in white_keys.iter().enumerate() {
+        let p = is_pressed(&wk.code);
+        let x_start = x0 + i * white_w;
+        let lx = (x_start + white_w / 2) as u16;
+
+        if lx >= inner.x && lx < inner.x + inner.width && label_y < inner.y + inner.height {
+            let st = if p {
+                Style::default().fg(kdr::ORANGE).bold().bg(kdr::BG0)
+            } else {
+                Style::default().fg(kdr::FG).bg(kdr::BG0)
+            };
+            buf[(lx, label_y)]
+                .set_char(wk.label.chars().next().unwrap_or(' '))
+                .set_style(st);
+        }
+    }
+
+    // --- 4) black keys (outline only), wipe underlying separators so no line appears inside ---
     for bk in black_keys.iter() {
         let p = is_pressed(&bk.code);
 
@@ -789,7 +826,7 @@ fn draw_bottom(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
         let bx = center_x.saturating_sub(black_w / 2);
 
         let outline = if p {
-            Style::default().fg(kdr::ORANGE).bg(kdr::BG0)
+            edge_orange
         } else {
             Style::default().fg(kdr::FG).bg(kdr::BG0)
         };
@@ -805,7 +842,6 @@ fn draw_bottom(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
         let y_top = inner.y;
         let y_bottom = inner.y + (black_h - 1) as u16;
 
-        // wipe underlying white-key separators inside the black-key area
         for row in 0..black_h {
             for col in 0..black_w {
                 let x = (bx + col) as u16;
@@ -818,35 +854,26 @@ fn draw_bottom(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
             }
         }
 
-        // top + bottom edges
         for col in 0..black_w {
             let x = (bx + col) as u16;
             if x >= inner.x && x < inner.x + inner.width {
-                if y_top < inner.y + inner.height {
-                    let ch = if col == 0 { '┌' } else if col == black_w - 1 { '┐' } else { '─' };
-                    buf[(x, y_top)].set_char(ch).set_style(outline);
-                }
-                if y_bottom < inner.y + inner.height {
-                    let ch = if col == 0 { '└' } else if col == black_w - 1 { '┘' } else { '─' };
-                    buf[(x, y_bottom)].set_char(ch).set_style(outline);
-                }
+                let top_ch = if col == 0 { '┌' } else if col == black_w - 1 { '┐' } else { '─' };
+                let bot_ch = if col == 0 { '└' } else if col == black_w - 1 { '┘' } else { '─' };
+                buf[(x, y_top)].set_char(top_ch).set_style(outline);
+                buf[(x, y_bottom)].set_char(bot_ch).set_style(outline);
             }
         }
 
-        // side edges
         for row in 1..black_h.saturating_sub(1) {
             let y = inner.y + row as u16;
-            if y < inner.y + inner.height {
-                if x_left >= inner.x && x_left < inner.x + inner.width {
-                    buf[(x_left, y)].set_char('│').set_style(outline);
-                }
-                if x_right >= inner.x && x_right < inner.x + inner.width {
-                    buf[(x_right, y)].set_char('│').set_style(outline);
-                }
+            if x_left >= inner.x && x_left < inner.x + inner.width {
+                buf[(x_left, y)].set_char('│').set_style(outline);
+            }
+            if x_right >= inner.x && x_right < inner.x + inner.width {
+                buf[(x_right, y)].set_char('│').set_style(outline);
             }
         }
 
-        // label centered on bottom edge of black key
         let lx = (bx + black_w / 2) as u16;
         if lx >= inner.x && lx < inner.x + inner.width && y_bottom < inner.y + inner.height {
             buf[(lx, y_bottom)]
