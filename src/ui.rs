@@ -721,7 +721,11 @@ fn draw_bottom(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
     }
 
     let edge_orange = Style::default().fg(kdr::ORANGE).bg(kdr::BG0);
-    let sep_norm = Style::default().fg(kdr::BORDER).bg(kdr::BG0);
+
+    // IMPORTANT: neutral grid style follows focus border color
+    let grid_norm = Style::default()
+        .fg(if focused { kdr::FG } else { kdr::BORDER })
+        .bg(kdr::BG0);
 
     let top_y = area.y;
     let bot_y = area.y + area.height - 1;
@@ -730,6 +734,7 @@ fn draw_bottom(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
 
     let sep_x = |i_boundary: usize| -> u16 { (x0 + (i_boundary + 1) * white_w - 1) as u16 };
 
+    // separators + junctions that become corners when a single side pressed
     for i in 0..(n_white - 1) {
         let x = sep_x(i);
         if x <= left_border_x || x >= right_border_x {
@@ -739,15 +744,15 @@ fn draw_bottom(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
         let left_p = is_pressed(&white_keys[i].code);
         let right_p = is_pressed(&white_keys[i + 1].code);
 
-        let st_inside = if left_p || right_p { edge_orange } else { sep_norm };
+        let st_inside = if left_p || right_p { edge_orange } else { grid_norm };
         for y in inner.y..(inner.y + inner.height) {
             buf[(x, y)].set_char('│').set_style(st_inside);
         }
 
         match (left_p, right_p) {
             (false, false) => {
-                buf[(x, top_y)].set_char('┬').set_style(sep_norm);
-                buf[(x, bot_y)].set_char('┴').set_style(sep_norm);
+                buf[(x, top_y)].set_char('┬').set_style(grid_norm);
+                buf[(x, bot_y)].set_char('┴').set_style(grid_norm);
             }
             (true, false) => {
                 buf[(x, top_y)].set_char('┐').set_style(edge_orange);
@@ -758,12 +763,15 @@ fn draw_bottom(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
                 buf[(x, bot_y)].set_char('└').set_style(edge_orange);
             }
             (true, true) => {
-                buf[(x, top_y)].set_char('┬').set_style(sep_norm);
-                buf[(x, bot_y)].set_char('┴').set_style(sep_norm);
+                // keep "no T highlight": neutral tees, but still focused-colored
+                buf[(x, top_y)].set_char('┬').set_style(grid_norm);
+                buf[(x, bot_y)].set_char('┴').set_style(grid_norm);
             }
         }
     }
 
+    // pressed white key: draw top/bottom edges between its two vertical edges (exclusive)
+    // plus outer border vertical + corners when first/last key pressed
     for i in 0..n_white {
         if !is_pressed(&white_keys[i].code) {
             continue;
@@ -800,6 +808,7 @@ fn draw_bottom(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
         }
     }
 
+    // labels
     let label_y = inner.y + inner.height - 1;
     for (i, wk) in white_keys.iter().enumerate() {
         let p = is_pressed(&wk.code);
@@ -818,7 +827,7 @@ fn draw_bottom(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
         }
     }
 
-    // --- 4) black keys (outline only), wipe underlying separators so no line appears inside ---
+    // black keys (outline only), wipe underlying separators so no line appears inside
     for bk in black_keys.iter() {
         let p = is_pressed(&bk.code);
 
