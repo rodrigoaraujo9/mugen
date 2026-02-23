@@ -421,7 +421,7 @@ fn draw_ui(f: &mut ratatui::Frame, ui: &UiState) {
 
     let main = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(5), Constraint::Min(0), Constraint::Length(4)])
+        .constraints([Constraint::Length(5), Constraint::Min(0), Constraint::Length(2)]) // <- 4 if one more line in help
         .split(inner);
 
     let logo_area = main[0];
@@ -558,10 +558,10 @@ fn draw_adsr(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
     let params = AdsrParam::all();
     let mut lines: Vec<Line> = Vec::new();
 
-    lines.push(Line::from(Span::styled(
-        "Edit ADSR",
-        Style::default().fg(kdr::MUTED),
-    )));
+    // lines.push(Line::from(Span::styled(
+    //     "Edit ADSR",
+    //     Style::default().fg(kdr::MUTED),
+    // )));
     lines.push(Line::from(""));
 
     if width == 0 {
@@ -676,7 +676,7 @@ fn draw_bottom(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
 
 fn draw_help(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
     let block = Block::default()
-        .borders(Borders::TOP)
+        // .borders(Borders::TOP)
         .border_style(Style::default().fg(kdr::BORDER))
         .style(Style::default().bg(kdr::BG0));
 
@@ -703,16 +703,16 @@ fn draw_help(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
         Span::styled(" quit", dim_style),
     ]);
 
-    let l2 = Line::from(vec![
-        Span::styled("Waveforms: ", dim_style),
-        Span::styled("↑/↓", key_style),
-        Span::styled(" auto-apply  ", dim_style),
-        Span::styled("|  ADSR: ", dim_style),
-        Span::styled("↑/↓", key_style),
-        Span::styled(" param  ", dim_style),
-        Span::styled("←/→", key_style),
-        Span::styled(" adjust", dim_style),
-    ]);
+    // let l2 = Line::from(vec![
+    //     Span::styled("Waveforms: ", dim_style),
+    //     Span::styled("↑/↓", key_style),
+    //     Span::styled(" auto-apply  ", dim_style),
+    //     Span::styled("|  ADSR: ", dim_style),
+    //     Span::styled("↑/↓", key_style),
+    //     Span::styled(" param  ", dim_style),
+    //     Span::styled("←/→", key_style),
+    //     Span::styled(" adjust", dim_style),
+    // ]);
 
     let l3 = Line::from(vec![
         Span::styled("Focus: ", dim_style),
@@ -728,7 +728,7 @@ fn draw_help(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
         ),
     ]);
 
-    let w = Paragraph::new(vec![l1, l2, l3])
+    let w = Paragraph::new(vec![l1 /*, l2 */, l3])
         .block(block)
         .alignment(Alignment::Center)
         .wrap(Wrap { trim: true })
