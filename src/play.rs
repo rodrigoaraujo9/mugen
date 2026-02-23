@@ -153,7 +153,7 @@ pub async fn run_audio(
     focused: Arc<AtomicBool>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let _handle = audio_system::get_handle().await.clone();
-    let (mut cmd_rx, snapshot_tx, initial) = audio_system::take_runtime_channels().await;
+    let (mut cmd_rx, snapshot_tx, held_keys_tx, initial) = audio_system::take_runtime_channels().await;
 
     let mut rt = RuntimeState {
         volume: initial.volume,
@@ -247,6 +247,8 @@ pub async fn run_audio(
                 match msg {
                     Some(Some((now, prev, toggle_b))) => {
                         rt.held_keys = now.iter().copied().filter(|k| *k != Keycode::B).collect();
+
+                        let _ = held_keys_tx.send(rt.held_keys.clone());
 
                         if toggle_b {
                             cycle_patch(&mut rt);

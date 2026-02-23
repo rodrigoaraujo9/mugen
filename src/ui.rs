@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::io;
 use std::io::stdout;
 use std::sync::{
@@ -5,6 +6,8 @@ use std::sync::{
     Arc,
 };
 use std::time::Duration;
+
+use device_query::Keycode;
 
 use crossterm::{
     event::{
@@ -27,6 +30,7 @@ use tokio::sync::{mpsc, watch};
 
 use crate::audio_system::AudioHandle;
 use crate::fx::adsr::Adsr;
+use crate::key::Key;
 use crate::patches::basic::{basic_source, BasicKind};
 
 #[allow(dead_code)]
@@ -111,6 +115,7 @@ struct UiState {
     patch_name: String,
     muted: bool,
     volume: f32,
+    held_keys: HashSet<Keycode>,
 }
 
 impl UiState {
@@ -130,6 +135,7 @@ impl UiState {
             patch_name: "Sine".to_string(),
             muted: false,
             volume: 1.0,
+            held_keys: HashSet::new(),
         }
     }
 
@@ -169,7 +175,7 @@ pub async fn run_ui(
             if event::poll(Duration::from_millis(50)).ok() == Some(true) {
                 match event::read() {
                     Ok(Event::Key(k)) => {
-                        if k.kind == KeyEventKind::Press {
+                        if k.kind == KeyEventKind::Press || k.kind == KeyEventKind::Release {
                             let _ = key_tx.send(k);
                         }
                     }
@@ -189,6 +195,7 @@ pub async fn run_ui(
     let mut show_intro = true;
 
     let mut snap_rx = handle.subscribe();
+    let mut held_keys_rx = handle.held_keys_rx.clone();
     let mut ui = UiState::new(Adsr::new(0.01, 0.10, 0.70, 0.25));
 
     loop {
@@ -208,6 +215,10 @@ pub async fn run_ui(
                 ui.patch_name = s.patch_name;
                 ui.muted = s.muted;
                 ui.volume = s.volume;
+            }
+
+            _ = held_keys_rx.changed() => {
+                ui.held_keys = held_keys_rx.borrow().clone();
             }
 
             k = key_rx.recv() => {
@@ -316,7 +327,7 @@ fn draw_intro(f: &mut ratatui::Frame) {
         r"          _____                    _____                    _____                    _____                    _____          ",
         r"         /\    \                  /\    \                  /\    \                  /\    \                  /\    \         ",
         r"        /::\____\                /::\____\                /::\    \                /::\    \                /::\____\        ",
-        r"       /::::|   |               /:::/    /               /::::\    \              /::::\    \              /::::|   |        ",
+        r"       /::::|   |               /:::/    /               /::::\    \              /::::\    \            /:::::|   |        ",
         r"      /:::::|   |              /:::/    /               /::::::\    \            /::::::\    \            /:::::|   |        ",
         r"     /::::::|   |             /:::/    /               /:::/\:::\    \          /:::/\:::\    \          /::::::|   |        ",
         r"    /:::/|::|   |            /:::/    /               /:::/  \:::\    \        /:::/__\:::\    \        /:::/|::|   |        ",
@@ -362,15 +373,6 @@ fn draw_intro(f: &mut ratatui::Frame) {
     let inner = outer.inner(area);
     f.render_widget(outer, area);
 
-    // if inner.width < max_w as u16 {
-    //     let msg = Paragraph::new("terminal too small")
-    //         .alignment(Alignment::Center)
-    //         .wrap(Wrap { trim: false })
-    //         .style(Style::default().fg(kdr::FG).bg(kdr::BG0));
-    //     f.render_widget(msg, inner);
-    //     return;
-    // }
-
     let total_h = art.len() as u16;
     let main_lines: Vec<Line> = lines.into_iter().take((total_h - 1) as usize).collect();
     let synthesis_line = Line::from(Span::styled(
@@ -412,7 +414,6 @@ fn draw_ui(f: &mut ratatui::Frame, ui: &UiState) {
 
     let outer = Block::default()
         .borders(Borders::ALL)
-        // .title(Span::styled(" mugen ", Style::default().fg(kdr::ORANGE).bold()))
         .border_style(Style::default().fg(kdr::BORDER))
         .style(Style::default().bg(kdr::BG0).fg(kdr::FG));
 
@@ -421,7 +422,7 @@ fn draw_ui(f: &mut ratatui::Frame, ui: &UiState) {
 
     let main = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(5), Constraint::Min(0), Constraint::Length(2)]) // <- 4 if one more line in help
+        .constraints([Constraint::Length(5), Constraint::Min(0), Constraint::Length(2)])
         .split(inner);
 
     let logo_area = main[0];
@@ -558,10 +559,6 @@ fn draw_adsr(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
     let params = AdsrParam::all();
     let mut lines: Vec<Line> = Vec::new();
 
-    // lines.push(Line::from(Span::styled(
-    //     "Edit ADSR",
-    //     Style::default().fg(kdr::MUTED),
-    // )));
     lines.push(Line::from(""));
 
     if width == 0 {
@@ -648,42 +645,146 @@ fn draw_bottom(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
         Style::default().fg(kdr::BORDER)
     };
 
-    let content_style = if focused {
-        Style::default().fg(kdr::FG).bg(kdr::BG0)
-    } else {
-        Style::default().fg(kdr::MUTED).bg(kdr::BG0)
-    };
-
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(tab_title("MIDI", focused))
+        .title(tab_title("piano", focused))
         .border_style(border)
         .style(Style::default().bg(kdr::BG0));
 
-    let lines = vec![Line::from(Span::styled(
-        "placeholder",
-        Style::default().fg(kdr::MUTED),
-    ))];
+    let inner = block.inner(area);
+    f.render_widget(block, area);
 
-    let w = Paragraph::new(lines)
-        .block(block)
-        .wrap(Wrap { trim: false })
-        .alignment(Alignment::Center)
-        .style(content_style);
+    if inner.width < 8 || inner.height < 4 {
+        return;
+    }
 
-    f.render_widget(w, area);
+    struct WhiteKey {
+        code: Keycode,
+        label: &'static str,
+    }
+    struct BlackKey {
+        code: Keycode,
+        label: &'static str,
+        gap_after: usize,
+    }
+
+    let white_keys = [
+        WhiteKey { code: Keycode::A, label: "a" },
+        WhiteKey { code: Keycode::S, label: "s" },
+        WhiteKey { code: Keycode::D, label: "d" },
+        WhiteKey { code: Keycode::F, label: "f" },
+        WhiteKey { code: Keycode::G, label: "g" },
+        WhiteKey { code: Keycode::H, label: "h" },
+        WhiteKey { code: Keycode::J, label: "j" },
+        WhiteKey { code: Keycode::K, label: "k" },
+        WhiteKey { code: Keycode::L, label: "l" },
+        WhiteKey { code: Keycode::Semicolon, label: ";" },
+        WhiteKey { code: Keycode::Apostrophe, label: "'" },
+    ];
+
+    let black_keys = [
+        BlackKey { code: Keycode::W, label: "w", gap_after: 0 },
+        BlackKey { code: Keycode::E, label: "e", gap_after: 1 },
+        BlackKey { code: Keycode::T, label: "t", gap_after: 3 },
+        BlackKey { code: Keycode::Y, label: "y", gap_after: 4 },
+        BlackKey { code: Keycode::U, label: "u", gap_after: 5 },
+        BlackKey { code: Keycode::O, label: "o", gap_after: 7 },
+        BlackKey { code: Keycode::P, label: "p", gap_after: 8 },
+    ];
+
+    let n_white = white_keys.len();
+    let total_w = inner.width as usize;
+    let total_h = inner.height as usize;
+
+    let white_w = (total_w / n_white).max(1);
+    let used_w = white_w * n_white;
+    let x0 = inner.x as usize + (total_w.saturating_sub(used_w)) / 2;
+
+    let white_h = total_h;
+    let black_h = ((white_h * 60) / 100).max(2);
+    let black_w = ((white_w * 55) / 100).max(1);
+
+    let is_pressed = |code: &Keycode| ui.held_keys.contains(code);
+
+    let buf = f.buffer_mut();
+
+    for row in 0..white_h {
+        for col in 0..used_w {
+            let x = (x0 + col) as u16;
+            let y = inner.y + row as u16;
+            if x < inner.x + inner.width && y < inner.y + inner.height {
+                buf[(x, y)].set_char(' ').set_style(Style::default().bg(kdr::BG0));
+            }
+        }
+    }
+
+    for (i, wk) in white_keys.iter().enumerate() {
+        let p = is_pressed(&wk.code);
+        let x_start = x0 + i * white_w;
+
+        let bg = if p { kdr::ORANGE } else { Color::Rgb(222, 218, 210) };
+        let fg = if p { kdr::BG0 } else { Color::Rgb(40, 36, 34) };
+
+        for row in 0..white_h {
+            for col in 0..white_w {
+                let x = (x_start + col) as u16;
+                let y = inner.y + row as u16;
+                if x >= inner.x && x < inner.x + inner.width && y < inner.y + inner.height {
+                    let is_right_border = col == white_w - 1 && i < n_white - 1;
+                    let is_label_row = row == white_h - 1;
+                    let is_label_col = col == white_w / 2;
+
+                    let (ch, style) = if is_right_border {
+                        ('│', Style::default().fg(Color::Rgb(100, 95, 88)).bg(bg))
+                    } else if is_label_row && is_label_col {
+                        (wk.label.chars().next().unwrap_or(' '), Style::default().fg(fg).bg(bg))
+                    } else {
+                        (' ', Style::default().bg(bg))
+                    };
+                    buf[(x, y)].set_char(ch).set_style(style);
+                }
+            }
+        }
+    }
+
+    for bk in black_keys.iter() {
+        let p = is_pressed(&bk.code);
+
+        let center_x = x0 + (bk.gap_after + 1) * white_w;
+        let bx = center_x.saturating_sub(black_w / 2);
+
+        let bg = if p { kdr::ORANGE } else { Color::Rgb(22, 20, 18) };
+        let fg = if p { kdr::BG0 } else { Color::Rgb(180, 175, 165) };
+
+        for row in 0..black_h {
+            for col in 0..black_w {
+                let x = (bx + col) as u16;
+                let y = inner.y + row as u16;
+                if x >= inner.x && x < inner.x + inner.width && y < inner.y + inner.height {
+                    let is_label_row = row == black_h - 1;
+                    let is_label_col = col == black_w / 2;
+
+                    let (ch, style) = if is_label_row && is_label_col {
+                        (bk.label.chars().next().unwrap_or(' '), Style::default().fg(fg).bg(bg))
+                    } else {
+                        (' ', Style::default().bg(bg))
+                    };
+                    buf[(x, y)].set_char(ch).set_style(style);
+                }
+            }
+        }
+    }
 }
 
 fn draw_help(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
     let block = Block::default()
-        // .borders(Borders::TOP)
         .border_style(Style::default().fg(kdr::BORDER))
         .style(Style::default().bg(kdr::BG0));
 
     let focus_name = match ui.focus {
         FocusPane::Waveforms => "Waveforms",
         FocusPane::Adsr => "ADSR",
-        FocusPane::Bottom => "Bottom",
+        FocusPane::Bottom => "Keyboard",
     };
 
     let key_style = Style::default().fg(kdr::ORANGE).bold();
@@ -703,17 +804,6 @@ fn draw_help(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
         Span::styled(" quit", dim_style),
     ]);
 
-    // let l2 = Line::from(vec![
-    //     Span::styled("Waveforms: ", dim_style),
-    //     Span::styled("↑/↓", key_style),
-    //     Span::styled(" auto-apply  ", dim_style),
-    //     Span::styled("|  ADSR: ", dim_style),
-    //     Span::styled("↑/↓", key_style),
-    //     Span::styled(" param  ", dim_style),
-    //     Span::styled("←/→", key_style),
-    //     Span::styled(" adjust", dim_style),
-    // ]);
-
     let l3 = Line::from(vec![
         Span::styled("Focus: ", dim_style),
         Span::styled(focus_name, strong),
@@ -728,7 +818,7 @@ fn draw_help(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
         ),
     ]);
 
-    let w = Paragraph::new(vec![l1 /*, l2 */, l3])
+    let w = Paragraph::new(vec![l1, l3])
         .block(block)
         .alignment(Alignment::Center)
         .wrap(Wrap { trim: true })

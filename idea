@@ -3,6 +3,8 @@ ui
 tab -> change focused component (source/fx(adsr)/volume)
 m -> mute
 
+drive / mono-poly-legato (no play) / cuttoff / sample_rate / resonance
+
 
 
 
