@@ -20,7 +20,7 @@ use ratatui::{
     prelude::Stylize,
     style::{Color, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Wrap},
+    widgets::{Block, Borders, Clear, Paragraph, Wrap},
     Terminal,
 };
 use tokio::sync::{mpsc, watch};
@@ -28,6 +28,24 @@ use tokio::sync::{mpsc, watch};
 use crate::audio_system::AudioHandle;
 use crate::fx::adsr::Adsr;
 use crate::patches::basic::{basic_source, BasicKind};
+
+#[allow(dead_code)]
+mod kdr {
+    use ratatui::style::Color;
+
+    pub const BG0: Color = Color::Rgb(24, 22, 22);
+    pub const BG1: Color = Color::Rgb(40, 39, 39);
+    pub const BORDER: Color = Color::Rgb(98, 94, 90);
+
+    pub const FG: Color = Color::Rgb(197, 201, 197);
+    pub const MUTED: Color = Color::Rgb(158, 155, 147);
+
+    pub const BLUE: Color = Color::Rgb(139, 164, 176);
+    pub const GREEN: Color = Color::Rgb(138, 154, 123);
+    pub const ORANGE: Color = Color::Rgb(182, 146, 123);
+    pub const YELLOW: Color = Color::Rgb(196, 178, 138);
+    pub const RED: Color = Color::Rgb(196, 116, 110);
+}
 
 struct TuiGuard;
 
@@ -73,12 +91,13 @@ impl AdsrParam {
             AdsrParam::Release,
         ]
     }
-    fn name(self) -> &'static str {
+
+    fn label_and_hint(self) -> (&'static str, &'static str) {
         match self {
-            AdsrParam::Attack => "Attack (s)",
-            AdsrParam::Decay => "Decay (s)",
-            AdsrParam::Sustain => "Sustain (0..1)",
-            AdsrParam::Release => "Release (s)",
+            AdsrParam::Attack => ("Attack", "(s)"),
+            AdsrParam::Decay => ("Decay", "(s)"),
+            AdsrParam::Sustain => ("Sustain", "(0..1)"),
+            AdsrParam::Release => ("Release", "(s)"),
         }
     }
 }
@@ -274,18 +293,10 @@ fn tweak_adsr(ui: &mut UiState, dir: i32) {
     let d = if dir < 0 { -step } else { step };
 
     match ui.selected_adsr_param() {
-        AdsrParam::Attack => {
-            ui.adsr.attack_s = (ui.adsr.attack_s + d).max(0.0);
-        }
-        AdsrParam::Decay => {
-            ui.adsr.decay_s = (ui.adsr.decay_s + d).max(0.0);
-        }
-        AdsrParam::Sustain => {
-            ui.adsr.sustain = (ui.adsr.sustain + d).clamp(0.0, 1.0);
-        }
-        AdsrParam::Release => {
-            ui.adsr.release_s = (ui.adsr.release_s + d).max(0.0);
-        }
+        AdsrParam::Attack => ui.adsr.attack_s = (ui.adsr.attack_s + d).max(0.0),
+        AdsrParam::Decay => ui.adsr.decay_s = (ui.adsr.decay_s + d).max(0.0),
+        AdsrParam::Sustain => ui.adsr.sustain = (ui.adsr.sustain + d).clamp(0.0, 1.0),
+        AdsrParam::Release => ui.adsr.release_s = (ui.adsr.release_s + d).max(0.0),
     }
 
     ui.adsr.attack_s = ui.adsr.attack_s.min(10.0);
@@ -342,21 +353,28 @@ fn draw_intro(f: &mut ratatui::Frame) {
         .collect();
 
     let area = f.area();
-    let outer = Block::default().borders(Borders::ALL);
+    f.render_widget(Clear, area);
+
+    let outer = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(kdr::BORDER))
+        .style(Style::default().bg(kdr::BG0).fg(kdr::FG));
     let inner = outer.inner(area);
     f.render_widget(outer, area);
 
     if inner.width < max_w as u16 {
         let msg = Paragraph::new("terminal too small")
             .alignment(Alignment::Center)
-            .wrap(Wrap { trim: false });
+            .wrap(Wrap { trim: false })
+            .style(Style::default().fg(kdr::FG).bg(kdr::BG0));
         f.render_widget(msg, inner);
         return;
     }
 
     let widget = Paragraph::new(lines)
         .alignment(Alignment::Center)
-        .wrap(Wrap { trim: false });
+        .wrap(Wrap { trim: false })
+        .style(Style::default().fg(kdr::FG).bg(kdr::BG0));
 
     let total_h = art.len() as u16;
     let y = inner.y + (inner.height.saturating_sub(total_h)) / 2;
@@ -372,18 +390,28 @@ fn draw_intro(f: &mut ratatui::Frame) {
 }
 
 fn draw_ui(f: &mut ratatui::Frame, ui: &UiState) {
-    let outer = Block::default().borders(Borders::ALL).title(" mugen ");
     let area = f.area();
+    f.render_widget(Clear, area);
+
+    let outer = Block::default()
+        .borders(Borders::ALL)
+        .title(Span::styled(" mugen ", Style::default().fg(kdr::ORANGE).bold()))
+        .border_style(Style::default().fg(kdr::BORDER))
+        .style(Style::default().bg(kdr::BG0).fg(kdr::FG));
+
     let inner = outer.inner(area);
     f.render_widget(outer, area);
 
     let main = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(0), Constraint::Length(4)])
+        .constraints([Constraint::Length(5), Constraint::Min(0), Constraint::Length(4)])
         .split(inner);
 
-    let content_area = main[0];
-    let help_area = main[1];
+    let logo_area = main[0];
+    let content_area = main[1];
+    let help_area = main[2];
+
+    draw_logo(f, logo_area);
 
     let rows = Layout::default()
         .direction(Direction::Vertical)
@@ -401,36 +429,61 @@ fn draw_ui(f: &mut ratatui::Frame, ui: &UiState) {
     draw_help(f, help_area, ui);
 }
 
+fn draw_logo(f: &mut ratatui::Frame, area: Rect) {
+    let lines = vec![
+        Line::from(Span::styled("無", Style::default().fg(kdr::FG)).bold()),
+        Line::from(Span::styled("限", Style::default().fg(kdr::FG)).bold()),
+    ];
+
+    let total_h = lines.len() as u16;
+    let y = area.y + area.height.saturating_sub(total_h) / 2;
+
+    let centered = Rect {
+        x: area.x,
+        y,
+        width: area.width,
+        height: total_h.min(area.height),
+    };
+
+    let w = Paragraph::new(lines)
+        .alignment(Alignment::Center)
+        .wrap(Wrap { trim: true })
+        .style(Style::default().bg(kdr::BG0));
+
+    f.render_widget(w, centered);
+}
+
+fn tab_title(name: &'static str, focused: bool) -> Span<'static> {
+    let t = format!(" {name} ");
+    if focused {
+        Span::styled(t, Style::default().fg(kdr::ORANGE).bold())
+    } else {
+        Span::styled(t, Style::default().fg(kdr::MUTED))
+    }
+}
+
 fn draw_waveforms(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
     let focused = ui.focus == FocusPane::Waveforms;
 
-    let title = if focused { " waveforms * " } else { " waveforms " };
     let border = if focused {
-        Style::default().fg(Color::White)
+        Style::default().fg(kdr::FG)
     } else {
-        Style::default().fg(Color::DarkGray)
+        Style::default().fg(kdr::BORDER)
     };
 
     let content_style = if focused {
-        Style::default()
+        Style::default().fg(kdr::FG).bg(kdr::BG0)
     } else {
-        Style::default().fg(Color::DarkGray)
+        Style::default().fg(kdr::MUTED).bg(kdr::BG0)
     };
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(title)
-        .border_style(border);
+        .title(tab_title("waveforms", focused))
+        .border_style(border)
+        .style(Style::default().bg(kdr::BG0));
 
     let mut lines: Vec<Line> = Vec::new();
-    lines.push(Line::from(vec![
-        Span::raw("Current: ").dim(),
-        Span::raw(ui.patch_name.clone()).bold(),
-        Span::raw("  "),
-        Span::raw(format!("vol {:.2}", ui.volume)).dim(),
-        Span::raw("  "),
-        Span::raw(if ui.muted { "muted" } else { "" }).dim(),
-    ]));
     lines.push(Line::from(""));
 
     for (i, k) in ui.waveforms.iter().copied().enumerate() {
@@ -438,9 +491,15 @@ fn draw_waveforms(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
         let is_sel = i == ui.waveform_idx;
 
         let line = if is_sel {
-            Line::from(vec![Span::raw("› ").bold(), Span::raw(name).bold()])
+            Line::from(vec![
+                Span::styled("› ", Style::default().fg(kdr::ORANGE).bold()),
+                Span::styled(name, Style::default().fg(kdr::FG).bold()),
+            ])
         } else {
-            Line::from(vec![Span::raw("  "), Span::raw(name)])
+            Line::from(vec![
+                Span::styled("  ", Style::default().fg(kdr::MUTED)),
+                Span::styled(name, Style::default().fg(kdr::FG)),
+            ])
         };
 
         lines.push(line);
@@ -458,29 +517,47 @@ fn draw_waveforms(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
 fn draw_adsr(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
     let focused = ui.focus == FocusPane::Adsr;
 
-    let title = if focused { " adsr * " } else { " adsr " };
     let border = if focused {
-        Style::default().fg(Color::White)
+        Style::default().fg(kdr::FG)
     } else {
-        Style::default().fg(Color::DarkGray)
+        Style::default().fg(kdr::BORDER)
     };
 
     let content_style = if focused {
-        Style::default()
+        Style::default().fg(kdr::FG).bg(kdr::BG0)
     } else {
-        Style::default().fg(Color::DarkGray)
+        Style::default().fg(kdr::MUTED).bg(kdr::BG0)
     };
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(title)
-        .border_style(border);
+        .title(tab_title("adsr", focused))
+        .border_style(border)
+        .style(Style::default().bg(kdr::BG0));
+
+    let inner = block.inner(area);
+    let width = inner.width as usize;
 
     let params = AdsrParam::all();
     let mut lines: Vec<Line> = Vec::new();
 
-    lines.push(Line::from("Edit ADSR"));
+    lines.push(Line::from(Span::styled(
+        "Edit ADSR",
+        Style::default().fg(kdr::MUTED),
+    )));
     lines.push(Line::from(""));
+
+    if width == 0 {
+        let w = Paragraph::new(lines)
+            .block(block)
+            .wrap(Wrap { trim: false })
+            .alignment(Alignment::Left)
+            .style(content_style);
+        f.render_widget(w, area);
+        return;
+    }
+
+    let right_padding = 1usize;
 
     for (i, p) in params.iter().copied().enumerate() {
         let is_sel = i == ui.adsr_param_idx;
@@ -492,25 +569,48 @@ fn draw_adsr(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
             AdsrParam::Release => format!("{:.3}", ui.adsr.release_s),
         };
 
+        let (label, hint) = p.label_and_hint();
         let prefix = if is_sel { "› " } else { "  " };
 
-        let line = if is_sel {
-            Line::from(vec![
-                Span::raw(prefix).bold(),
-                Span::raw(format!("{:<14}", p.name())).bold(),
-                Span::raw(" "),
-                Span::raw(val).bold(),
-            ])
+        let prefix_style = if is_sel {
+            Style::default().fg(kdr::ORANGE).bold()
         } else {
-            Line::from(vec![
-                Span::raw(prefix),
-                Span::raw(format!("{:<14}", p.name())).dim(),
-                Span::raw(" "),
-                Span::raw(val),
-            ])
+            Style::default().fg(kdr::MUTED)
         };
 
-        lines.push(line);
+        let label_style = if is_sel {
+            Style::default().fg(kdr::FG).bold()
+        } else {
+            Style::default().fg(kdr::FG)
+        };
+
+        let hint_style = Style::default().fg(kdr::MUTED);
+
+        let value_style = if is_sel {
+            Style::default().fg(kdr::FG).bold()
+        } else {
+            Style::default().fg(kdr::FG)
+        };
+
+        let left_label = format!("{label} ");
+        let left_len =
+            prefix.chars().count() + left_label.chars().count() + hint.chars().count();
+
+        let val_len = val.chars().count();
+        let min_gap = 2usize;
+
+        let usable_width = width.saturating_sub(right_padding);
+        let pad_len = usable_width.saturating_sub(left_len + min_gap + val_len);
+        let pad = " ".repeat(pad_len + min_gap);
+
+        lines.push(Line::from(vec![
+            Span::styled(prefix, prefix_style),
+            Span::styled(left_label, label_style),
+            Span::styled(hint, hint_style),
+            Span::raw(pad),
+            Span::styled(val, value_style),
+            Span::raw(" ".repeat(right_padding)),
+        ]));
     }
 
     let w = Paragraph::new(lines)
@@ -525,25 +625,28 @@ fn draw_adsr(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
 fn draw_bottom(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
     let focused = ui.focus == FocusPane::Bottom;
 
-    let title = if focused { " bottom * " } else { " bottom " };
     let border = if focused {
-        Style::default().fg(Color::White)
+        Style::default().fg(kdr::FG)
     } else {
-        Style::default().fg(Color::DarkGray)
+        Style::default().fg(kdr::BORDER)
     };
 
     let content_style = if focused {
-        Style::default()
+        Style::default().fg(kdr::FG).bg(kdr::BG0)
     } else {
-        Style::default().fg(Color::DarkGray)
+        Style::default().fg(kdr::MUTED).bg(kdr::BG0)
     };
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(title)
-        .border_style(border);
+        .title(tab_title("MIDI", focused))
+        .border_style(border)
+        .style(Style::default().bg(kdr::BG0));
 
-    let lines = vec![Line::from("placeholder")];
+    let lines = vec![Line::from(Span::styled(
+        "placeholder",
+        Style::default().fg(kdr::MUTED),
+    ))];
 
     let w = Paragraph::new(lines)
         .block(block)
@@ -555,11 +658,10 @@ fn draw_bottom(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
 }
 
 fn draw_help(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
-    let style = Style::default().fg(Color::DarkGray);
-
     let block = Block::default()
         .borders(Borders::TOP)
-        .border_style(style);
+        .border_style(Style::default().fg(kdr::BORDER))
+        .style(Style::default().bg(kdr::BG0));
 
     let focus_name = match ui.focus {
         FocusPane::Waveforms => "Waveforms",
@@ -567,46 +669,53 @@ fn draw_help(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
         FocusPane::Bottom => "Bottom",
     };
 
+    let key_style = Style::default().fg(kdr::ORANGE).bold();
+    let dim_style = Style::default().fg(kdr::MUTED);
+    let strong = Style::default().fg(kdr::FG).bold();
+
     let l1 = Line::from(vec![
-        Span::raw("Tab").bold(),
-        Span::styled(" focus  ", style),
-        Span::raw("↑/↓").bold(),
-        Span::styled(" select  ", style),
-        Span::raw("←/→").bold(),
-        Span::styled(" change  ", style),
-        Span::raw("q").bold(),
-        Span::styled(" quit  ", style),
-        Span::raw("Ctrl+C").bold(),
-        Span::styled(" quit", style),
+        Span::styled("Tab", key_style),
+        Span::styled(" focus  ", dim_style),
+        Span::styled("↑/↓", key_style),
+        Span::styled(" select  ", dim_style),
+        Span::styled("←/→", key_style),
+        Span::styled(" change  ", dim_style),
+        Span::styled("q", key_style),
+        Span::styled(" quit  ", dim_style),
+        Span::styled("Ctrl+C", key_style),
+        Span::styled(" quit", dim_style),
     ]);
 
     let l2 = Line::from(vec![
-        Span::styled("Waveforms: ", style),
-        Span::raw("↑/↓").bold(),
-        Span::styled(" auto-apply  ", style),
-        Span::styled("|  ADSR: ", style),
-        Span::raw("↑/↓").bold(),
-        Span::styled(" param  ", style),
-        Span::raw("←/→").bold(),
-        Span::styled(" adjust", style),
+        Span::styled("Waveforms: ", dim_style),
+        Span::styled("↑/↓", key_style),
+        Span::styled(" auto-apply  ", dim_style),
+        Span::styled("|  ADSR: ", dim_style),
+        Span::styled("↑/↓", key_style),
+        Span::styled(" param  ", dim_style),
+        Span::styled("←/→", key_style),
+        Span::styled(" adjust", dim_style),
     ]);
 
     let l3 = Line::from(vec![
-        Span::styled("Focus: ", style),
-        Span::raw(focus_name).bold(),
-        Span::styled("  |  Wave: ", style),
-        Span::raw(ui.patch_name.clone()).bold(),
-        Span::styled("  |  Vol ", style),
-        Span::raw(format!("{:.2}", ui.volume)).bold(),
-        Span::styled("  ", style),
-        Span::styled(if ui.muted { "Muted" } else { "" }, style),
+        Span::styled("Focus: ", dim_style),
+        Span::styled(focus_name, strong),
+        Span::styled("  |  Wave: ", dim_style),
+        Span::styled(ui.patch_name.clone(), strong),
+        Span::styled("  |  Vol ", dim_style),
+        Span::styled(format!("{:.2}", ui.volume), strong),
+        Span::styled("  ", dim_style),
+        Span::styled(
+            if ui.muted { "Muted" } else { "" },
+            Style::default().fg(kdr::RED).bold(),
+        ),
     ]);
 
     let w = Paragraph::new(vec![l1, l2, l3])
         .block(block)
         .alignment(Alignment::Center)
         .wrap(Wrap { trim: true })
-        .style(style);
+        .style(Style::default().bg(kdr::BG0));
 
     f.render_widget(w, area);
 }
