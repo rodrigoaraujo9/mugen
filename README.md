@@ -2,7 +2,7 @@
 
 I am building a **terminal-based synthesizer** in Rust.
 
-You can play it live from your computer keyboard, switch waveforms as you go, and layer notes like a real instrument. The goal is not a DAW — it’s a **playable synth** that feels immediate and hackable.
+You can play it live from your computer keyboard, switch waveforms as you go, and layer notes like a real instrument. You can also create Wave Sources and Effects easily due to the generator -> chain of nodes architecture.
 
 Right now it focuses on:
 
@@ -10,6 +10,7 @@ Right now it focuses on:
 - polyphonic playing
 - switching sound character while notes are held
 - adsr manipulation (hardcoded to amp)
+- displaying in real time which keys are being played
 
 ## Available waveforms
 
@@ -25,12 +26,13 @@ You can rotate between them while playing.
 
 - Use the keyboard (A–L row + W/E/T/Y/U/O/P) like a small piano
 - Hold multiple keys to play chords
-- Press **B** to change the waveform
+- Use **TAB** and arrow buttons to navigate and play around with values
 - Press **Q** or **Ctrl+C** to quit
 
 ## Screenshot
 
-![capture](images/capture1.png)
+![Intro](images/intro.png)
+![UI](images/ui.png)
 
 ---
 
@@ -55,7 +57,7 @@ You can rotate between them while playing.
 ### Synth improvements
 
 - One sink per voice with a **dynamic mixer** (instead of many sinks) ??
-- Proper **envelope controls**  
+- Proper (not hardcoded) **envelope controls**  
   (attack, decay, sustain, release)
 - Unison, detune, LFO, glide/portamento
 - Mono / poly modes
@@ -64,7 +66,6 @@ You can rotate between them while playing.
 ### UI
 
 - Ratatui UI with:
-    - keyboard drawn at the bottom
     - knobs/sliders for synth parameters
     - support for real keyboard + MIDI input
     - visualizers (waveform, volume, spectrum)
