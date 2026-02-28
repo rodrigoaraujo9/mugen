@@ -98,6 +98,7 @@ struct RuntimeState {
     avaliable_patches: Vec<Box<dyn AudioSource>>,
     toggle_index: usize,
     held_keys: HashSet<Keycode>,
+    octave_offset: i32,
 }
 
 fn publish_snapshot(tx: &tokio::sync::watch::Sender<audio_system::AudioSnapshot>, rt: &RuntimeState) {
@@ -110,7 +111,7 @@ fn publish_snapshot(tx: &tokio::sync::watch::Sender<audio_system::AudioSnapshot>
 
 async fn play_note(play_state: &mut PlayState, rt: &RuntimeState, keycode: Keycode) {
     let Some(key) = Key::from_keycode(keycode) else { return; };
-    let freq = key.frequency();
+    let freq = key.transpose(rt.octave_offset * 12).frequency();
 
     let gate: Gate = Arc::new(AtomicBool::new(true));
 
@@ -169,6 +170,7 @@ pub async fn run_audio(
         ],
         toggle_index: 0,
         held_keys: HashSet::new(),
+        octave_offset: 0,
     };
 
     let mut play_state = PlayState::new()?;
@@ -303,6 +305,10 @@ pub async fn run_audio(
                     audio_system::AudioCommand::SetAdsr(adsr) => {
                         rt.adsr = adsr;
                         publish_snapshot(&snapshot_tx, &rt);
+                        restart_active_notes(&mut play_state, &rt).await;
+                    }
+                    audio_system::AudioCommand::SetOctave(o) => {
+                        rt.octave_offset = o;
                         restart_active_notes(&mut play_state, &rt).await;
                     }
                 }

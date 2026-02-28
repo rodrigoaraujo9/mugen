@@ -116,6 +116,7 @@ struct UiState {
     muted: bool,
     volume: f32,
     held_keys: HashSet<Keycode>,
+    octave_offset: i32,
 }
 
 impl UiState {
@@ -136,6 +137,7 @@ impl UiState {
             muted: false,
             volume: 1.0,
             held_keys: HashSet::new(),
+            octave_offset: 0,
         }
     }
 
@@ -286,7 +288,23 @@ pub async fn run_ui(
                         }
                     }
 
-                    FocusPane::Bottom => {}
+                    FocusPane::Bottom => {
+                        match k.code {
+                            KeyCode::Right => {
+                                if ui.octave_offset < 4 {
+                                    ui.octave_offset += 1;
+                                    handle.set_octave(ui.octave_offset);
+                                }
+                            }
+                            KeyCode::Left => {
+                                if ui.octave_offset > -4 {
+                                    ui.octave_offset -= 1;
+                                    handle.set_octave(ui.octave_offset);
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
                 }
             }
 
@@ -637,26 +655,44 @@ fn draw_adsr(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
 }
 
 fn draw_bottom(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
-    let focused = ui.focus == FocusPane::Bottom;
+    use ratatui::buffer::Buffer;
 
-    let border = if focused {
-        Style::default().fg(kdr::FG)
-    } else {
-        Style::default().fg(kdr::BORDER)
-    };
+    fn fill_rect(buf: &mut Buffer, bounds: Rect, x: u16, y: u16, w: u16, h: u16, st: Style) {
+        if w == 0 || h == 0 {
+            return;
+        }
+        let x2 = x.saturating_add(w);
+        let y2 = y.saturating_add(h);
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title(tab_title("piano", focused))
-        .border_style(border)
-        .style(Style::default().bg(kdr::BG0));
+        let xmin = x.max(bounds.x);
+        let ymin = y.max(bounds.y);
+        let xmax = x2.min(bounds.x + bounds.width);
+        let ymax = y2.min(bounds.y + bounds.height);
 
-    let inner = block.inner(area);
-    f.render_widget(block, area);
-
-    if inner.width < 8 || inner.height < 4 {
-        return;
+        for yy in ymin..ymax {
+            for xx in xmin..xmax {
+                buf[(xx, yy)].set_char(' ').set_style(st);
+            }
+        }
     }
+
+    fn vline(buf: &mut Buffer, bounds: Rect, x: u16, y: u16, h: u16, ch: char, st: Style) {
+        if h == 0 {
+            return;
+        }
+        if x < bounds.x || x >= bounds.x + bounds.width {
+            return;
+        }
+        let y2 = y.saturating_add(h);
+        let ymin = y.max(bounds.y);
+        let ymax = y2.min(bounds.y + bounds.height);
+
+        for yy in ymin..ymax {
+            buf[(x, yy)].set_char(ch).set_style(st);
+        }
+    }
+
+    let focused = ui.focus == FocusPane::Bottom;
 
     struct WhiteKey {
         code: Keycode,
@@ -692,202 +728,114 @@ fn draw_bottom(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
         BlackKey { code: Keycode::P, label: "p", gap_after: 8 },
     ];
 
-    let n_white = white_keys.len();
-    let total_w = inner.width as usize;
-    let total_h = inner.height as usize;
+    let is_pressed = |code: &Keycode| ui.held_keys.contains(code);
 
-    let white_w = (total_w / n_white).max(1);
+    let bounds = area;
+    if bounds.width < 18 || bounds.height < 6 {
+        return;
+    }
+
+    let n_white = white_keys.len();
+    let total_w = bounds.width as usize;
+    let total_h = bounds.height as usize;
+
+    let white_w = (total_w / n_white).max(4);
     let used_w = white_w * n_white;
-    let x0 = inner.x as usize + (total_w.saturating_sub(used_w)) / 2;
+    let x0 = bounds.x as usize + (total_w.saturating_sub(used_w)) / 2;
 
     let white_h = total_h;
     let black_h = ((white_h * 60) / 100).max(2);
-    let black_w = ((white_w * 55) / 100).max(1);
-
-    let is_pressed = |code: &Keycode| ui.held_keys.contains(code);
+    let black_w = ((white_w * 55) / 100).max(2);
 
     let buf = f.buffer_mut();
 
-    for row in 0..white_h {
-        for col in 0..used_w {
-            let x = (x0 + col) as u16;
-            let y = inner.y + row as u16;
-            if x < inner.x + inner.width && y < inner.y + inner.height {
-                buf[(x, y)]
-                    .set_char(' ')
-                    .set_style(Style::default().bg(kdr::BG0));
-            }
-        }
+    let bg = Style::default().bg(kdr::BG0);
+    fill_rect(buf, bounds, bounds.x, bounds.y, bounds.width, bounds.height, bg);
+
+    let white_bg = if focused { kdr::FG } else { kdr::BORDER };
+    let white_fill = Style::default().bg(white_bg).fg(kdr::BG0);
+
+    let orange_fill = Style::default().bg(kdr::ORANGE).fg(kdr::BG0);
+
+    let sep_style = Style::default().fg(kdr::BG0).bg(white_bg);
+
+    let black_fill = Style::default().bg(kdr::BG0).fg(kdr::FG);
+    let black_pressed = Style::default().bg(kdr::ORANGE).fg(kdr::BG0);
+
+    for (i, wk) in white_keys.iter().enumerate() {
+        let x = (x0 + i * white_w) as u16;
+        let y = bounds.y;
+        let w = white_w as u16;
+        let h = white_h as u16;
+
+        let st = if is_pressed(&wk.code) { orange_fill } else { white_fill };
+        fill_rect(buf, bounds, x, y, w, h, st);
     }
 
-    let edge_orange = Style::default().fg(kdr::ORANGE).bg(kdr::BG0);
-
-    // IMPORTANT: neutral grid style follows focus border color
-    let grid_norm = Style::default()
-        .fg(if focused { kdr::FG } else { kdr::BORDER })
-        .bg(kdr::BG0);
-
-    let top_y = area.y;
-    let bot_y = area.y + area.height - 1;
-    let left_border_x = area.x;
-    let right_border_x = area.x + area.width - 1;
-
-    let sep_x = |i_boundary: usize| -> u16 { (x0 + (i_boundary + 1) * white_w - 1) as u16 };
-
-    // separators + junctions that become corners when a single side pressed
     for i in 0..(n_white - 1) {
-        let x = sep_x(i);
-        if x <= left_border_x || x >= right_border_x {
+        let x = (x0 + (i + 1) * white_w - 1) as u16;
+        vline(buf, bounds, x, bounds.y, bounds.height, '│', sep_style);
+    }
+
+    for (i, wk) in white_keys.iter().enumerate() {
+        if !is_pressed(&wk.code) {
             continue;
         }
-
+        let x = (x0 + i * white_w) as u16;
+        fill_rect(buf, bounds, x, bounds.y, white_w as u16, bounds.height, orange_fill);
+    }
+    for i in 0..(n_white - 1) {
         let left_p = is_pressed(&white_keys[i].code);
         let right_p = is_pressed(&white_keys[i + 1].code);
-
-        let st_inside = if left_p || right_p { edge_orange } else { grid_norm };
-        for y in inner.y..(inner.y + inner.height) {
-            buf[(x, y)].set_char('│').set_style(st_inside);
-        }
-
-        match (left_p, right_p) {
-            (false, false) => {
-                buf[(x, top_y)].set_char('┬').set_style(grid_norm);
-                buf[(x, bot_y)].set_char('┴').set_style(grid_norm);
-            }
-            (true, false) => {
-                buf[(x, top_y)].set_char('┐').set_style(edge_orange);
-                buf[(x, bot_y)].set_char('┘').set_style(edge_orange);
-            }
-            (false, true) => {
-                buf[(x, top_y)].set_char('┌').set_style(edge_orange);
-                buf[(x, bot_y)].set_char('└').set_style(edge_orange);
-            }
-            (true, true) => {
-                // keep "no T highlight": neutral tees, but still focused-colored
-                buf[(x, top_y)].set_char('┬').set_style(grid_norm);
-                buf[(x, bot_y)].set_char('┴').set_style(grid_norm);
-            }
+        if left_p || right_p {
+            let x = (x0 + (i + 1) * white_w - 1) as u16;
+            fill_rect(buf, bounds, x, bounds.y, 1, bounds.height, orange_fill);
         }
     }
 
-    // pressed white key: draw top/bottom edges between its two vertical edges (exclusive)
-    // plus outer border vertical + corners when first/last key pressed
-    for i in 0..n_white {
-        if !is_pressed(&white_keys[i].code) {
-            continue;
-        }
-
-        let x_left_edge = if i == 0 { left_border_x } else { sep_x(i - 1) };
-        let x_right_edge = if i == n_white - 1 { right_border_x } else { sep_x(i) };
-
-        let start = x_left_edge.saturating_add(1);
-        let end_excl = x_right_edge;
-        if start < end_excl {
-            for x in start..end_excl {
-                if x > left_border_x && x < right_border_x {
-                    buf[(x, top_y)].set_char('─').set_style(edge_orange);
-                    buf[(x, bot_y)].set_char('─').set_style(edge_orange);
-                }
-            }
-        }
-
-        if i == 0 {
-            for y in (top_y + 1)..bot_y {
-                buf[(left_border_x, y)].set_style(edge_orange);
-            }
-            buf[(left_border_x, top_y)].set_char('┌').set_style(edge_orange);
-            buf[(left_border_x, bot_y)].set_char('└').set_style(edge_orange);
-        }
-
-        if i == n_white - 1 {
-            for y in (top_y + 1)..bot_y {
-                buf[(right_border_x, y)].set_style(edge_orange);
-            }
-            buf[(right_border_x, top_y)].set_char('┐').set_style(edge_orange);
-            buf[(right_border_x, bot_y)].set_char('┘').set_style(edge_orange);
-        }
-    }
-
-    // labels
-    let label_y = inner.y + inner.height - 1;
+    let label_y = bounds.y + bounds.height - 1;
     for (i, wk) in white_keys.iter().enumerate() {
-        let p = is_pressed(&wk.code);
-        let x_start = x0 + i * white_w;
-        let lx = (x_start + white_w / 2) as u16;
+        let x = (x0 + i * white_w) as u16;
+        let w = white_w as u16;
+        let lx = x + (w / 2);
 
-        if lx >= inner.x && lx < inner.x + inner.width && label_y < inner.y + inner.height {
-            let st = if p {
-                Style::default().fg(kdr::ORANGE).bold().bg(kdr::BG0)
+        if lx >= bounds.x && lx < bounds.x + bounds.width {
+            let pressed = is_pressed(&wk.code);
+            let st = if pressed {
+                Style::default().fg(kdr::BG0).bg(kdr::ORANGE).bold()
             } else {
-                Style::default().fg(kdr::FG).bg(kdr::BG0)
+                Style::default().fg(kdr::BG0).bg(white_bg)
             };
             buf[(lx, label_y)]
                 .set_char(wk.label.chars().next().unwrap_or(' '))
                 .set_style(st);
         }
     }
-
-    // black keys (outline only), wipe underlying separators so no line appears inside
     for bk in black_keys.iter() {
-        let p = is_pressed(&bk.code);
+        let pressed = is_pressed(&bk.code);
 
         let center_x = x0 + (bk.gap_after + 1) * white_w;
         let bx = center_x.saturating_sub(black_w / 2);
 
-        let outline = if p {
-            edge_orange
-        } else {
-            Style::default().fg(kdr::FG).bg(kdr::BG0)
-        };
+        let x = bx as u16;
+        let y = bounds.y;
+        let w = black_w as u16;
+        let h = black_h as u16;
 
-        let label_style = if p {
-            Style::default().fg(kdr::ORANGE).bold().bg(kdr::BG0)
-        } else {
-            Style::default().fg(kdr::FG).bg(kdr::BG0)
-        };
+        fill_rect(buf, bounds, x, y, w, h, if pressed { black_pressed } else { black_fill });
 
-        let x_left = bx as u16;
-        let x_right = (bx + black_w - 1) as u16;
-        let y_top = inner.y;
-        let y_bottom = inner.y + (black_h - 1) as u16;
-
-        for row in 0..black_h {
-            for col in 0..black_w {
-                let x = (bx + col) as u16;
-                let y = inner.y + row as u16;
-                if x >= inner.x && x < inner.x + inner.width && y < inner.y + inner.height {
-                    buf[(x, y)]
-                        .set_char(' ')
-                        .set_style(Style::default().bg(kdr::BG0));
-                }
-            }
-        }
-
-        for col in 0..black_w {
-            let x = (bx + col) as u16;
-            if x >= inner.x && x < inner.x + inner.width {
-                let top_ch = if col == 0 { '┌' } else if col == black_w - 1 { '┐' } else { '─' };
-                let bot_ch = if col == 0 { '└' } else if col == black_w - 1 { '┘' } else { '─' };
-                buf[(x, y_top)].set_char(top_ch).set_style(outline);
-                buf[(x, y_bottom)].set_char(bot_ch).set_style(outline);
-            }
-        }
-
-        for row in 1..black_h.saturating_sub(1) {
-            let y = inner.y + row as u16;
-            if x_left >= inner.x && x_left < inner.x + inner.width {
-                buf[(x_left, y)].set_char('│').set_style(outline);
-            }
-            if x_right >= inner.x && x_right < inner.x + inner.width {
-                buf[(x_right, y)].set_char('│').set_style(outline);
-            }
-        }
-
-        let lx = (bx + black_w / 2) as u16;
-        if lx >= inner.x && lx < inner.x + inner.width && y_bottom < inner.y + inner.height {
-            buf[(lx, y_bottom)]
+        let lx = x + (w / 2);
+        let ly = y + h - 1;
+        if lx >= bounds.x && lx < bounds.x + bounds.width && ly >= bounds.y && ly < bounds.y + bounds.height
+        {
+            let st = if pressed {
+                Style::default().fg(kdr::BG0).bg(kdr::ORANGE).bold()
+            } else {
+                Style::default().fg(kdr::FG).bg(kdr::BG0)
+            };
+            buf[(lx, ly)]
                 .set_char(bk.label.chars().next().unwrap_or(' '))
-                .set_style(label_style);
+                .set_style(st);
         }
     }
 }
@@ -927,10 +875,14 @@ fn draw_help(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
         Span::styled(ui.patch_name.clone(), strong),
         Span::styled("  |  Vol ", dim_style),
         Span::styled(format!("{:.2}", ui.volume), strong),
-        Span::styled("  ", dim_style),
         Span::styled(
             if ui.muted { "Muted" } else { "" },
             Style::default().fg(kdr::RED).bold(),
+        ),
+        Span::styled("  |  Oct ", dim_style),
+        Span::styled(
+            format!("{:+}", ui.octave_offset),
+            if ui.octave_offset == 0 { strong } else { Style::default().fg(kdr::YELLOW).bold() }
         ),
     ]);
 

@@ -19,6 +19,7 @@ pub enum AudioCommand {
     TogglePatch(Vec<Box<dyn AudioSource>>),
     SetPatch(Box<dyn AudioSource>),
     SetAdsr(Adsr),
+    SetOctave(i32),
 }
 
 /// handle used by the UI: send commands + subscribe to live snapshots
@@ -47,6 +48,9 @@ impl AudioHandle {
     }
     pub fn subscribe(&self) -> watch::Receiver<AudioSnapshot> {
         self.snapshot_rx.clone()
+    }
+    pub fn set_octave(&self, o: i32) {
+        let _ = self.tx.send(AudioCommand::SetOctave(o));
     }
 }
 
