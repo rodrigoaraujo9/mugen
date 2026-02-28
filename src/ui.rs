@@ -21,7 +21,7 @@ use ratatui::{
     backend::CrosstermBackend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     prelude::Stylize,
-    style::{Color, Style},
+    style::Style,
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
     Terminal,
@@ -30,7 +30,6 @@ use tokio::sync::{mpsc, watch};
 
 use crate::audio_system::AudioHandle;
 use crate::fx::adsr::Adsr;
-use crate::key::Key;
 use crate::patches::basic::{basic_source, BasicKind};
 
 #[allow(dead_code)]
@@ -341,11 +340,21 @@ fn ui_selected_small_step(p: AdsrParam) -> f32 {
 }
 
 fn draw_intro(f: &mut ratatui::Frame) {
+    let area = f.area();
+
+    const MIN_W: u16 = 136;
+    const MIN_H: u16 = 25;
+
+    if area.width < MIN_W || area.height < MIN_H {
+        draw_too_small(f, area, MIN_W, MIN_H);
+        return;
+    }
+
     let art: [&str; 23] = [
         r"          _____                    _____                    _____                    _____                    _____          ",
         r"         /\    \                  /\    \                  /\    \                  /\    \                  /\    \         ",
         r"        /::\____\                /::\____\                /::\    \                /::\    \                /::\____\        ",
-        r"       /::::|   |               /:::/    /               /::::\    \              /::::\    \            /:::::|   |        ",
+        r"       /::::|   |               /:::/    /               /::::\    \              /::::\    \              /::::|   |        ",
         r"      /:::::|   |              /:::/    /               /::::::\    \            /::::::\    \            /:::::|   |        ",
         r"     /::::::|   |             /:::/    /               /:::/\:::\    \          /:::/\:::\    \          /::::::|   |        ",
         r"    /:::/|::|   |            /:::/    /               /:::/  \:::\    \        /:::/__\:::\    \        /:::/|::|   |        ",
@@ -381,7 +390,6 @@ fn draw_intro(f: &mut ratatui::Frame) {
         })
         .collect();
 
-    let area = f.area();
     f.render_widget(Clear, area);
 
     let outer = Block::default()
@@ -428,6 +436,15 @@ fn draw_intro(f: &mut ratatui::Frame) {
 
 fn draw_ui(f: &mut ratatui::Frame, ui: &UiState) {
     let area = f.area();
+
+    const MIN_W: u16 = 136;
+    const MIN_H: u16 = 25;
+
+    if area.width < MIN_W || area.height < MIN_H {
+        draw_too_small(f, area, MIN_W, MIN_H);
+        return;
+    }
+
     f.render_widget(Clear, area);
 
     let outer = Block::default()
@@ -463,6 +480,30 @@ fn draw_ui(f: &mut ratatui::Frame, ui: &UiState) {
     draw_adsr(f, top[1], ui);
     draw_bottom(f, rows[1], ui);
     draw_help(f, help_area, ui);
+}
+
+fn draw_too_small(f: &mut ratatui::Frame, area: Rect, min_w: u16, min_h: u16) {
+    f.render_widget(Clear, area);
+    let outer = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(kdr::BORDER))
+        .style(Style::default().bg(kdr::BG0).fg(kdr::FG));
+    let inner = outer.inner(area);
+    f.render_widget(outer, area);
+    let msg = vec![
+        Line::from(Span::styled("terminal too small", Style::default().fg(kdr::RED).bold())),
+        Line::from(Span::styled(
+            format!("need {}×{}  —  currently {}×{}", min_w, min_h, area.width, area.height),
+            Style::default().fg(kdr::MUTED),
+        )),
+    ];
+    let h = msg.len() as u16;
+    let y = inner.y + inner.height.saturating_sub(h) / 2;
+    let msg_area = Rect { x: inner.x, y, width: inner.width, height: h.min(inner.height) };
+    f.render_widget(
+        Paragraph::new(msg).alignment(Alignment::Center).style(Style::default().bg(kdr::BG0)),
+        msg_area,
+    );
 }
 
 fn draw_logo(f: &mut ratatui::Frame, area: Rect) {
@@ -877,7 +918,7 @@ fn draw_help(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
         Span::styled(format!("{:.2}", ui.volume), strong),
         Span::styled(
             if ui.muted { "Muted" } else { "" },
-            Style::default().fg(kdr::RED).bold(),
+            Style::default().fg(kdr::ORANGE).bold(),
         ),
         Span::styled("  |  Oct ", dim_style),
         Span::styled(
