@@ -4,7 +4,7 @@ use crate::fx::adsr::Adsr;
 use std::collections::HashSet;
 use device_query::Keycode;
 
-/// current audio state that the UI can read (volume/mute + which source is active).
+/// current audio state that the UI can read (volume/mute + which source is active)
 #[derive(Debug, Clone)]
 pub struct AudioSnapshot {
     pub volume: f32,

@@ -94,18 +94,30 @@ struct RuntimeState {
     volume: f32,
     muted: bool,
     adsr: Adsr,
-    current_patch: Box<dyn AudioSource>,
     avaliable_patches: Vec<Box<dyn AudioSource>>,
-    toggle_index: usize,
+    current_patch_idx: usize,
     held_keys: HashSet<Keycode>,
     octave_offset: i32,
 }
 
+impl RuntimeState {
+    fn current_patch(&self) -> Option<&dyn AudioSource> {
+        self.avaliable_patches
+            .get(self.current_patch_idx)
+            .map(|p| p.as_ref())
+    }
+}
+
 fn publish_snapshot(tx: &tokio::sync::watch::Sender<audio_system::AudioSnapshot>, rt: &RuntimeState) {
+    let patch_name = rt
+        .current_patch()
+        .map(|p| p.name().to_string())
+        .unwrap_or_else(|| "<no patch>".to_string());
+
     let _ = tx.send(audio_system::AudioSnapshot {
         volume: rt.volume,
         muted: rt.muted,
-        patch_name: rt.current_patch.name().to_string(),
+        patch_name,
     });
 }
 
@@ -119,7 +131,9 @@ async fn play_note(play_state: &mut PlayState, rt: &RuntimeState, keycode: Keyco
     sink.set_volume(rt.volume);
     if rt.muted { sink.pause(); }
 
-    let raw_src = rt.current_patch.create_source(freq);
+    let Some(patch) = rt.current_patch() else { return; };
+    let raw_src = patch.create_source(freq);
+
     let adsr_node = AdsrNode::new(rt.adsr, SAMPLE_RATE, gate.clone());
     let src = adsr_node.apply(raw_src);
     sink.append(src);
@@ -135,18 +149,11 @@ async fn restart_active_notes(play_state: &mut PlayState, rt: &RuntimeState) {
 }
 
 fn cycle_patch(rt: &mut RuntimeState) {
-    if rt.avaliable_patches.is_empty() {
+    let n = rt.avaliable_patches.len();
+    if n == 0 {
         return;
     }
-    rt.toggle_index = (rt.toggle_index + 1) % rt.avaliable_patches.len();
-    rt.current_patch = basic_source(match rt.toggle_index {
-        0 => BasicKind::Sine,
-        1 => BasicKind::Saw,
-        2 => BasicKind::Square,
-        3 => BasicKind::Triangle,
-        4 => BasicKind::Noise,
-        _ => BasicKind::Sine,
-    });
+    rt.current_patch_idx = (rt.current_patch_idx + 1) % n;
 }
 
 pub async fn run_audio(
@@ -160,7 +167,6 @@ pub async fn run_audio(
         volume: initial.volume,
         muted: initial.muted,
         adsr: Adsr::new(ADSR_ATTACK_S, ADSR_DECAY_S, ADSR_SUSTAIN, ADSR_RELEASE_S),
-        current_patch: basic_source(BasicKind::Sine),
         avaliable_patches: vec![
             basic_source(BasicKind::Sine),
             basic_source(BasicKind::Saw),
@@ -168,7 +174,7 @@ pub async fn run_audio(
             basic_source(BasicKind::Triangle),
             basic_source(BasicKind::Noise),
         ],
-        toggle_index: 0,
+        current_patch_idx: 0,
         held_keys: HashSet::new(),
         octave_offset: 0,
     };
@@ -291,14 +297,18 @@ pub async fn run_audio(
                     audio_system::AudioCommand::TogglePatch(patches) => {
                         if !patches.is_empty() {
                             rt.avaliable_patches = patches;
-                            rt.toggle_index = 0;
-                            rt.current_patch = basic_source(BasicKind::Sine);
+                            rt.current_patch_idx = 0;
                             publish_snapshot(&snapshot_tx, &rt);
                             restart_active_notes(&mut play_state, &rt).await;
                         }
                     }
                     audio_system::AudioCommand::SetPatch(patch) => {
-                        rt.current_patch = patch;
+                        if rt.avaliable_patches.is_empty() {
+                            rt.avaliable_patches.push(patch);
+                            rt.current_patch_idx = 0;
+                        } else {
+                            rt.avaliable_patches[rt.current_patch_idx] = patch;
+                        }
                         publish_snapshot(&snapshot_tx, &rt);
                         restart_active_notes(&mut play_state, &rt).await;
                     }
