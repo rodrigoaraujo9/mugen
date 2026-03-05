@@ -10,7 +10,7 @@ Right now it focuses on:
 - polyphonic playing
 - switching sound character while notes are held
 - adsr manipulation (hardcoded to amp)
-- dynamic lfo manipulation supporting any kind of wave and any kind of application (amp for now)
+- dynamic LFO manipulation supporting any kind of wave and any kind of application (amp for now)
 - displaying in real time which keys are being played
 
 ## Available waveforms
