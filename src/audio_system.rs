@@ -1,8 +1,9 @@
 use tokio::sync::{mpsc, watch, OnceCell, Mutex};
-use crate::audio_patch::AudioSource;
-use crate::fx::adsr::Adsr;
 use std::collections::HashSet;
 use device_query::Keycode;
+
+use crate::audio_patch::Generator;
+use crate::fx::adsr::Adsr;
 
 /// current audio state that the UI can read (volume/mute + which source is active)
 #[derive(Debug, Clone)]
@@ -16,8 +17,8 @@ pub struct AudioSnapshot {
 pub enum AudioCommand {
     SetVolume(f32),
     SetMuted(bool),
-    TogglePatch(Vec<Box<dyn AudioSource>>),
-    SetPatch(Box<dyn AudioSource>),
+    TogglePatch(Vec<Box<dyn Generator>>),
+    SetPatch(Box<dyn Generator>),
     SetAdsr(Adsr),
     SetOctave(i32),
 }
@@ -37,10 +38,10 @@ impl AudioHandle {
     pub fn set_muted(&self, m: bool) {
         let _ = self.tx.send(AudioCommand::SetMuted(m));
     }
-    pub fn toggle_patch(&self, patches: Vec<Box<dyn AudioSource>>) {
+    pub fn toggle_patch(&self, patches: Vec<Box<dyn Generator>>) {
         let _ = self.tx.send(AudioCommand::TogglePatch(patches));
     }
-    pub fn set_patch(&self, patch: Box<dyn AudioSource>) {
+    pub fn set_patch(&self, patch: Box<dyn Generator>) {
         let _ = self.tx.send(AudioCommand::SetPatch(patch));
     }
     pub fn set_adsr(&self, adsr: Adsr) {

@@ -1,4 +1,3 @@
-use crate::audio_patch::Node;
 use device_query::{DeviceQuery, DeviceState, Keycode};
 use std::collections::{HashMap, HashSet};
 use std::sync::{
@@ -12,12 +11,14 @@ use rodio::Sink;
 
 use tokio::{signal::ctrl_c, task};
 
-use crate::config::{TICK, SAMPLE_RATE, ADSR_ATTACK_S, ADSR_DECAY_S, ADSR_SUSTAIN, ADSR_RELEASE_S};
-use crate::key::Key;
-use crate::patches::basic::{basic_source, BasicKind};
+use crate::audio_patch::{Generator, Node};
+use crate::config::{
+    TICK, SAMPLE_RATE, ADSR_ATTACK_S, ADSR_DECAY_S, ADSR_SUSTAIN, ADSR_RELEASE_S,
+};
 use crate::fx::adsr::{Adsr, AdsrNode, Gate};
+use crate::key::Key;
+use crate::patches::basic::{basic_generator, BasicKind};
 use crate::audio_system;
-use crate::audio_patch::AudioSource;
 
 pub type ActiveNote = (Sink, Gate);
 
@@ -34,23 +35,6 @@ impl PlayState {
 
     fn stop_note(&mut self, keycode: Keycode) {
         if let Some(voices) = self.active_sinks.get_mut(&keycode) {
-            for (_sink, gate) in voices.iter_mut() {
-                gate.store(false, Ordering::Relaxed);
-            }
-        }
-    }
-
-    fn kill_note(&mut self, keycode: Keycode) {
-        if let Some(mut voices) = self.active_sinks.remove(&keycode) {
-            for (sink, gate) in voices.drain(..) {
-                gate.store(false, Ordering::Relaxed);
-                sink.stop();
-            }
-        }
-    }
-
-    fn stop_all(&mut self) {
-        for (_k, voices) in self.active_sinks.iter_mut() {
             for (_sink, gate) in voices.iter_mut() {
                 gate.store(false, Ordering::Relaxed);
             }
@@ -94,24 +78,29 @@ struct RuntimeState {
     volume: f32,
     muted: bool,
     adsr: Adsr,
-    avaliable_patches: Vec<Box<dyn AudioSource>>,
-    current_patch_idx: usize,
+
+    available_generators: Vec<Box<dyn Generator>>,
+    current_gen_idx: usize,
+
     held_keys: HashSet<Keycode>,
     octave_offset: i32,
 }
 
 impl RuntimeState {
-    fn current_patch(&self) -> Option<&dyn AudioSource> {
-        self.avaliable_patches
-            .get(self.current_patch_idx)
-            .map(|p| p.as_ref())
+    fn current_generator(&self) -> Option<&dyn Generator> {
+        self.available_generators
+            .get(self.current_gen_idx)
+            .map(|g| g.as_ref())
     }
 }
 
-fn publish_snapshot(tx: &tokio::sync::watch::Sender<audio_system::AudioSnapshot>, rt: &RuntimeState) {
+fn publish_snapshot(
+    tx: &tokio::sync::watch::Sender<audio_system::AudioSnapshot>,
+    rt: &RuntimeState,
+) {
     let patch_name = rt
-        .current_patch()
-        .map(|p| p.name().to_string())
+        .current_generator()
+        .map(|g| g.name().to_string())
         .unwrap_or_else(|| "<no patch>".to_string());
 
     let _ = tx.send(audio_system::AudioSnapshot {
@@ -131,13 +120,13 @@ async fn play_note(play_state: &mut PlayState, rt: &RuntimeState, keycode: Keyco
     sink.set_volume(rt.volume);
     if rt.muted { sink.pause(); }
 
-    let Some(patch) = rt.current_patch() else { return; };
-    let raw_src = patch.create_source(freq);
+    let Some(generator) = rt.current_generator() else { return; };
+    let raw_src = generator.create(freq);
 
     let adsr_node = AdsrNode::new(rt.adsr, SAMPLE_RATE, gate.clone());
     let src = adsr_node.apply(raw_src);
-    sink.append(src);
 
+    sink.append(src);
     play_state.active_sinks.entry(keycode).or_default().push((sink, gate));
 }
 
@@ -149,11 +138,11 @@ async fn restart_active_notes(play_state: &mut PlayState, rt: &RuntimeState) {
 }
 
 fn cycle_patch(rt: &mut RuntimeState) {
-    let n = rt.avaliable_patches.len();
+    let n = rt.available_generators.len();
     if n == 0 {
         return;
     }
-    rt.current_patch_idx = (rt.current_patch_idx + 1) % n;
+    rt.current_gen_idx = (rt.current_gen_idx + 1) % n;
 }
 
 pub async fn run_audio(
@@ -161,20 +150,23 @@ pub async fn run_audio(
     focused: Arc<AtomicBool>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let _handle = audio_system::get_handle().await.clone();
-    let (mut cmd_rx, snapshot_tx, held_keys_tx, initial) = audio_system::take_runtime_channels().await;
+    let (mut cmd_rx, snapshot_tx, held_keys_tx, initial) =
+        audio_system::take_runtime_channels().await;
 
     let mut rt = RuntimeState {
         volume: initial.volume,
         muted: initial.muted,
         adsr: Adsr::new(ADSR_ATTACK_S, ADSR_DECAY_S, ADSR_SUSTAIN, ADSR_RELEASE_S),
-        avaliable_patches: vec![
-            basic_source(BasicKind::Sine),
-            basic_source(BasicKind::Saw),
-            basic_source(BasicKind::Square),
-            basic_source(BasicKind::Triangle),
-            basic_source(BasicKind::Noise),
+
+        available_generators: vec![
+            basic_generator(BasicKind::Sine),
+            basic_generator(BasicKind::Saw),
+            basic_generator(BasicKind::Square),
+            basic_generator(BasicKind::Triangle),
+            basic_generator(BasicKind::Noise),
         ],
-        current_patch_idx: 0,
+        current_gen_idx: 0,
+
         held_keys: HashSet::new(),
         octave_offset: 0,
     };
@@ -185,7 +177,9 @@ pub async fn run_audio(
     let stop_flag = Arc::new(AtomicBool::new(false));
     let stop_flag_bg = stop_flag.clone();
 
-    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<Option<(HashSet<Keycode>, HashSet<Keycode>, bool)>>();
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<
+        Option<(HashSet<Keycode>, HashSet<Keycode>, bool)>,
+    >();
 
     let focused_bg = focused.clone();
 
@@ -289,34 +283,39 @@ pub async fn run_audio(
                         play_state.set_all_volume(rt.volume);
                         publish_snapshot(&snapshot_tx, &rt);
                     }
+
                     audio_system::AudioCommand::SetMuted(m) => {
                         rt.muted = m;
                         play_state.set_all_muted(rt.muted);
                         publish_snapshot(&snapshot_tx, &rt);
                     }
-                    audio_system::AudioCommand::TogglePatch(patches) => {
-                        if !patches.is_empty() {
-                            rt.avaliable_patches = patches;
-                            rt.current_patch_idx = 0;
+
+                    audio_system::AudioCommand::TogglePatch(generators) => {
+                        if !generators.is_empty() {
+                            rt.available_generators = generators;
+                            rt.current_gen_idx = 0;
                             publish_snapshot(&snapshot_tx, &rt);
                             restart_active_notes(&mut play_state, &rt).await;
                         }
                     }
-                    audio_system::AudioCommand::SetPatch(patch) => {
-                        if rt.avaliable_patches.is_empty() {
-                            rt.avaliable_patches.push(patch);
-                            rt.current_patch_idx = 0;
+
+                    audio_system::AudioCommand::SetPatch(generator) => {
+                        if rt.available_generators.is_empty() {
+                            rt.available_generators.push(generator);
+                            rt.current_gen_idx = 0;
                         } else {
-                            rt.avaliable_patches[rt.current_patch_idx] = patch;
+                            rt.available_generators[rt.current_gen_idx] = generator;
                         }
                         publish_snapshot(&snapshot_tx, &rt);
                         restart_active_notes(&mut play_state, &rt).await;
                     }
+
                     audio_system::AudioCommand::SetAdsr(adsr) => {
                         rt.adsr = adsr;
                         publish_snapshot(&snapshot_tx, &rt);
                         restart_active_notes(&mut play_state, &rt).await;
                     }
+
                     audio_system::AudioCommand::SetOctave(o) => {
                         rt.octave_offset = o;
                         restart_active_notes(&mut play_state, &rt).await;

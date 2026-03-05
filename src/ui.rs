@@ -30,7 +30,8 @@ use tokio::sync::{mpsc, watch};
 
 use crate::audio_system::AudioHandle;
 use crate::fx::adsr::Adsr;
-use crate::patches::basic::{basic_source, BasicKind};
+
+use crate::patches::basic::{basic_generator, BasicKind};
 
 #[allow(dead_code)]
 mod kdr {
@@ -263,7 +264,7 @@ pub async fn run_ui(
                         }
                         if changed {
                             let kind = ui.selected_waveform();
-                            handle.set_patch(basic_source(kind));
+                            handle.set_patch(basic_generator(kind));
                         }
                     }
 
@@ -491,7 +492,7 @@ fn draw_too_small(f: &mut ratatui::Frame, area: Rect, min_w: u16, min_h: u16) {
     let inner = outer.inner(area);
     f.render_widget(outer, area);
     let msg = vec![
-        Line::from(Span::styled("terminal too small", Style::default().fg(kdr::RED).bold())),
+        Line::from(Span::styled("terminal too small", Style::default().fg(kdr::ORANGE).bold())),
         Line::from(Span::styled(
             format!("need {}×{}  —  currently {}×{}", min_w, min_h, area.width, area.height),
             Style::default().fg(kdr::MUTED),

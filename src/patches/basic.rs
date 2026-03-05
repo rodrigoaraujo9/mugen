@@ -3,7 +3,7 @@ use std::time::Duration;
 use rodio::Source;
 use rodio::source::{SineWave, SquareWave, TriangleWave, SawtoothWave};
 
-use crate::audio_patch::{AudioSource, SynthSource};
+use crate::audio_patch::{Generator, SynthSource};
 use crate::config::{AMP_DEFAULT, ENDLESS, SAMPLE_RATE};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,7 +43,7 @@ struct NoiseParams {
     sample_rate: u32,
 }
 
-pub fn basic_source(kind: BasicKind) -> Box<dyn AudioSource> {
+pub fn basic_generator(kind: BasicKind) -> Box<dyn Generator> {
     let noise = if kind == BasicKind::Noise {
         Some(NoiseParams {
             seed: 0x1234_5678_9ABC_DEF0,
@@ -53,7 +53,7 @@ pub fn basic_source(kind: BasicKind) -> Box<dyn AudioSource> {
         None
     };
 
-    Box::new(BasicSource {
+    Box::new(BasicGenerator {
         kind,
         amplitude: AMP_DEFAULT,
         duration: ENDLESS,
@@ -61,15 +61,15 @@ pub fn basic_source(kind: BasicKind) -> Box<dyn AudioSource> {
     })
 }
 
-struct BasicSource {
+struct BasicGenerator {
     kind: BasicKind,
     amplitude: f32,
     duration: Duration,
     noise: Option<NoiseParams>,
 }
 
-impl AudioSource for BasicSource {
-    fn create_source(&self, frequency: f32) -> SynthSource {
+impl Generator for BasicGenerator {
+    fn create(&self, frequency: f32) -> SynthSource {
         match self.kind {
             BasicKind::Sine => Box::new(
                 SineWave::new(frequency)
@@ -97,7 +97,6 @@ impl AudioSource for BasicSource {
 
             BasicKind::Noise => {
                 let p = self.noise.expect("Noise params missing for BasicKind::Noise");
-
                 Box::new(
                     NoiseGen::new(p.seed, p.sample_rate)
                         .amplify(self.amplitude)
@@ -138,10 +137,7 @@ impl NoiseGen {
 
 impl Iterator for NoiseGen {
     type Item = f32;
-
-    fn next(&mut self) -> Option<f32> {
-        Some(self.next_noise())
-    }
+    fn next(&mut self) -> Option<f32> { Some(self.next_noise()) }
 }
 
 impl Source for NoiseGen {
