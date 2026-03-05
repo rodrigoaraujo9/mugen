@@ -10,6 +10,7 @@ Right now it focuses on:
 - polyphonic playing
 - switching sound character while notes are held
 - adsr manipulation (hardcoded to amp)
+- dynamic lfo manipulation supporting any kind of wave and any kind of application (amp for now)
 - displaying in real time which keys are being played
 
 ## Available waveforms
@@ -52,7 +53,7 @@ You can rotate between them while playing.
 - Audio capture and oscilator/audio wave visualization
 - Use **Lua** for config / scripting allowing user to have his own presets
 - Make patches and fx configurable and dynamically loadable (third-party friendly)
-- Add essential fx (adsr, phase distortion, cutoff, etc.)
+- Add essential fx (phase distortion, cutoff, etc.)
 
 ### Synth improvements
 
