@@ -1,5 +1,7 @@
 use tokio::time::Duration;
 
+use crate::{patches::basic::BasicKind};
+
 //play.rs
 pub const TICK: u64 = 10;
 
@@ -21,3 +23,8 @@ pub const ADSR_ATTACK_S: f32  = 0.5; //sec
 pub const ADSR_DECAY_S: f32   = 0.5; //sec
 pub const ADSR_SUSTAIN: f32   = 0.4; //0..1
 pub const ADSR_RELEASE_S: f32 = 1.0; //sec
+
+// LFO defaults
+pub const LFO_KIND: BasicKind = BasicKind::Sine;
+pub const LFO_RATE_HZ: f32 = 10.0;
+pub const LFO_DEPTH: f32 = 1.0;

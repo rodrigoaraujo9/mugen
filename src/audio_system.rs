@@ -4,6 +4,10 @@ use device_query::Keycode;
 
 use crate::audio_patch::Generator;
 use crate::fx::adsr::Adsr;
+use crate::fx::lfo_amp::LfoAmp;
+
+use crate::patches::basic::BasicKind;
+use crate::config::{ADSR_ATTACK_S, ADSR_DECAY_S, ADSR_SUSTAIN, ADSR_RELEASE_S, LFO_KIND, LFO_RATE_HZ, LFO_DEPTH};
 
 /// current audio state that the UI can read (volume/mute + which source is active)
 #[derive(Debug, Clone)]
@@ -11,6 +15,8 @@ pub struct AudioSnapshot {
     pub volume: f32,
     pub muted: bool,
     pub patch_name: String,
+    pub adsr: Adsr,
+    pub lfo: LfoAmp,
 }
 
 /// cmds that the UI sends to the audio runtime to change behavior
@@ -21,6 +27,7 @@ pub enum AudioCommand {
     SetPatch(Box<dyn Generator>),
     SetAdsr(Adsr),
     SetOctave(i32),
+    SetLFOAmp(LfoAmp),
 }
 
 /// handle used by the UI: send commands + subscribe to live snapshots
@@ -32,27 +39,14 @@ pub struct AudioHandle {
 }
 
 impl AudioHandle {
-    pub fn set_volume(&self, v: f32) {
-        let _ = self.tx.send(AudioCommand::SetVolume(v));
-    }
-    pub fn set_muted(&self, m: bool) {
-        let _ = self.tx.send(AudioCommand::SetMuted(m));
-    }
-    pub fn toggle_patch(&self, patches: Vec<Box<dyn Generator>>) {
-        let _ = self.tx.send(AudioCommand::TogglePatch(patches));
-    }
-    pub fn set_patch(&self, patch: Box<dyn Generator>) {
-        let _ = self.tx.send(AudioCommand::SetPatch(patch));
-    }
-    pub fn set_adsr(&self, adsr: Adsr) {
-        let _ = self.tx.send(AudioCommand::SetAdsr(adsr));
-    }
-    pub fn subscribe(&self) -> watch::Receiver<AudioSnapshot> {
-        self.snapshot_rx.clone()
-    }
-    pub fn set_octave(&self, o: i32) {
-        let _ = self.tx.send(AudioCommand::SetOctave(o));
-    }
+    pub fn set_volume(&self, v: f32) { let _ = self.tx.send(AudioCommand::SetVolume(v)); }
+    pub fn set_muted(&self, m: bool) { let _ = self.tx.send(AudioCommand::SetMuted(m)); }
+    pub fn toggle_patch(&self, patches: Vec<Box<dyn Generator>>) { let _ = self.tx.send(AudioCommand::TogglePatch(patches)); }
+    pub fn set_patch(&self, patch: Box<dyn Generator>) { let _ = self.tx.send(AudioCommand::SetPatch(patch)); }
+    pub fn set_adsr(&self, adsr: Adsr) { let _ = self.tx.send(AudioCommand::SetAdsr(adsr)); }
+    pub fn set_octave(&self, o: i32) { let _ = self.tx.send(AudioCommand::SetOctave(o)); }
+    pub fn set_lfoamp(&self, lfo: LfoAmp) { let _ = self.tx.send(AudioCommand::SetLFOAmp(lfo)); }
+    pub fn subscribe(&self) -> watch::Receiver<AudioSnapshot> { self.snapshot_rx.clone() }
 }
 
 /// internal singleton state
@@ -69,13 +63,21 @@ pub async fn get_handle() -> &'static AudioHandle {
     &AUDIO
         .get_or_init(|| async {
             let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
+
+            let initial_adsr = Adsr::new(ADSR_ATTACK_S, ADSR_DECAY_S, ADSR_SUSTAIN, ADSR_RELEASE_S);
+            let initial_lfo  = LfoAmp::new(LFO_KIND, LFO_RATE_HZ, LFO_DEPTH);
+
             let initial = AudioSnapshot {
                 volume: 1.0,
                 muted: false,
                 patch_name: "Sine".to_string(),
+                adsr: initial_adsr,
+                lfo: initial_lfo,
             };
+
             let (snapshot_tx, snapshot_rx) = watch::channel(initial);
             let (held_keys_tx, held_keys_rx) = watch::channel(HashSet::new());
+
             AudioSystem {
                 handle: AudioHandle { tx: cmd_tx, snapshot_rx, held_keys_rx },
                 cmd_rx: Mutex::new(Some(cmd_rx)),

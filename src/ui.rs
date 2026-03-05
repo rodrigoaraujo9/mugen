@@ -33,6 +33,9 @@ use crate::fx::adsr::Adsr;
 
 use crate::patches::basic::{basic_generator, BasicKind};
 
+use crate::fx::lfo_amp::LfoAmp;
+
+
 #[allow(dead_code)]
 mod kdr {
     use ratatui::style::Color;
@@ -66,13 +69,15 @@ enum FocusPane {
     Waveforms,
     Adsr,
     Bottom,
+    Lfo,
 }
 
 impl FocusPane {
     fn next(self) -> Self {
         match self {
             FocusPane::Waveforms => FocusPane::Adsr,
-            FocusPane::Adsr => FocusPane::Bottom,
+            FocusPane::Adsr => FocusPane::Lfo,
+            FocusPane::Lfo => FocusPane::Bottom,
             FocusPane::Bottom => FocusPane::Waveforms,
         }
     }
@@ -106,12 +111,39 @@ impl AdsrParam {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum LfoParam {
+    Kind,
+    RateHz,
+    Depth,
+}
+
+impl LfoParam {
+    fn all() -> [LfoParam; 3] {
+        [LfoParam::Kind, LfoParam::RateHz, LfoParam::Depth]
+    }
+
+    fn label_and_hint(self) -> (&'static str, &'static str) {
+        match self {
+            LfoParam::Kind => ("Wave", ""),
+            LfoParam::RateHz => ("Rate", "(Hz)"),
+            LfoParam::Depth => ("Depth", "(0..1)"),
+        }
+    }
+}
+
 struct UiState {
     focus: FocusPane,
+
     waveforms: Vec<BasicKind>,
     waveform_idx: usize,
+
     adsr_param_idx: usize,
     adsr: Adsr,
+
+    lfo_param_idx: usize,
+    lfo: LfoAmp,
+
     patch_name: String,
     muted: bool,
     volume: f32,
@@ -121,6 +153,8 @@ struct UiState {
 
 impl UiState {
     fn new(initial_adsr: Adsr) -> Self {
+        let initial_lfo = LfoAmp::new(BasicKind::Sine, 5.0, 0.0);
+
         Self {
             focus: FocusPane::Waveforms,
             waveforms: vec![
@@ -133,6 +167,10 @@ impl UiState {
             waveform_idx: 0,
             adsr_param_idx: 0,
             adsr: initial_adsr,
+
+            lfo_param_idx: 0,
+            lfo: initial_lfo,
+
             patch_name: "Sine".to_string(),
             muted: false,
             volume: 1.0,
@@ -147,6 +185,10 @@ impl UiState {
 
     fn selected_adsr_param(&self) -> AdsrParam {
         AdsrParam::all()[self.adsr_param_idx]
+    }
+
+    fn selected_lfo_param(&self) -> LfoParam {
+        LfoParam::all()[self.lfo_param_idx]
     }
 }
 
@@ -217,6 +259,8 @@ pub async fn run_ui(
                 ui.patch_name = s.patch_name;
                 ui.muted = s.muted;
                 ui.volume = s.volume;
+                ui.adsr = s.adsr;
+                ui.lfo = s.lfo;
             }
 
             _ = held_keys_rx.changed() => {
@@ -305,6 +349,25 @@ pub async fn run_ui(
                             _ => {}
                         }
                     }
+                    FocusPane::Lfo => {
+                        match k.code {
+                            KeyCode::Up => {
+                                if ui.lfo_param_idx > 0 { ui.lfo_param_idx -= 1; }
+                            }
+                            KeyCode::Down => {
+                                if ui.lfo_param_idx + 1 < 3 { ui.lfo_param_idx += 1; }
+                            }
+                            KeyCode::Left => {
+                                tweak_lfo(&mut ui, -1);
+                                handle.set_lfoamp(ui.lfo);
+                            }
+                            KeyCode::Right => {
+                                tweak_lfo(&mut ui, 1);
+                                handle.set_lfoamp(ui.lfo);
+                            }
+                            _ => {}
+                        }
+                    }
                 }
             }
 
@@ -315,6 +378,38 @@ pub async fn run_ui(
     stop.store(true, Ordering::Relaxed);
     terminal.show_cursor()?;
     Ok(())
+}
+
+fn tweak_lfo(ui: &mut UiState, dir: i32) {
+    let d = if dir < 0 { -1 } else { 1 };
+
+    match ui.selected_lfo_param() {
+        LfoParam::Kind => {
+            ui.lfo.kind = next_basic_kind(ui.lfo.kind, d);
+        }
+        LfoParam::RateHz => {
+            let step = 0.25;
+            ui.lfo.rate_hz = (ui.lfo.rate_hz + (d as f32) * step).clamp(0.05, 40.0);
+        }
+        LfoParam::Depth => {
+            let step = 0.02;
+            ui.lfo.depth = (ui.lfo.depth + (d as f32) * step).clamp(0.0, 1.0);
+        }
+    }
+}
+
+fn next_basic_kind(k: BasicKind, dir: i32) -> BasicKind {
+    let all = [
+        BasicKind::Sine,
+        BasicKind::Saw,
+        BasicKind::Square,
+        BasicKind::Triangle,
+        BasicKind::Noise,
+    ];
+    let idx = all.iter().position(|x| *x == k).unwrap_or(0) as i32;
+    let n = all.len() as i32;
+    let next = (idx + dir).rem_euclid(n) as usize;
+    all[next]
 }
 
 fn tweak_adsr(ui: &mut UiState, dir: i32) {
@@ -439,7 +534,7 @@ fn draw_ui(f: &mut ratatui::Frame, ui: &UiState) {
     let area = f.area();
 
     const MIN_W: u16 = 136;
-    const MIN_H: u16 = 25;
+    const MIN_H: u16 = 33;
 
     if area.width < MIN_W || area.height < MIN_H {
         draw_too_small(f, area, MIN_W, MIN_H);
@@ -458,7 +553,7 @@ fn draw_ui(f: &mut ratatui::Frame, ui: &UiState) {
 
     let main = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(5), Constraint::Min(0), Constraint::Length(2)])
+        .constraints([Constraint::Length(5), Constraint::Min(0), Constraint::Length(3)])
         .split(inner);
 
     let logo_area = main[0];
@@ -474,11 +569,23 @@ fn draw_ui(f: &mut ratatui::Frame, ui: &UiState) {
 
     let top = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .constraints([
+            Constraint::Percentage(50),
+            Constraint::Percentage(50),
+        ])
         .split(rows[0]);
 
+    let right = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage(55),
+            Constraint::Percentage(45),
+        ])
+        .split(top[1]);
+
     draw_waveforms(f, top[0], ui);
-    draw_adsr(f, top[1], ui);
+    draw_adsr(f, right[0], ui);
+    draw_lfo(f, right[1], ui);
     draw_bottom(f, rows[1], ui);
     draw_help(f, help_area, ui);
 }
@@ -505,6 +612,107 @@ fn draw_too_small(f: &mut ratatui::Frame, area: Rect, min_w: u16, min_h: u16) {
         Paragraph::new(msg).alignment(Alignment::Center).style(Style::default().bg(kdr::BG0)),
         msg_area,
     );
+}
+
+fn draw_lfo(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
+    let focused = ui.focus == FocusPane::Lfo;
+
+    let border = if focused {
+        Style::default().fg(kdr::FG)
+    } else {
+        Style::default().fg(kdr::BORDER)
+    };
+
+    let content_style = if focused {
+        Style::default().fg(kdr::FG).bg(kdr::BG0)
+    } else {
+        Style::default().fg(kdr::MUTED).bg(kdr::BG0)
+    };
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(tab_title("lfo", focused))
+        .border_style(border)
+        .style(Style::default().bg(kdr::BG0));
+
+    let inner = block.inner(area);
+    let width = inner.width as usize;
+
+    let params = LfoParam::all();
+    let mut lines: Vec<Line> = Vec::new();
+    lines.push(Line::from(""));
+
+    if width == 0 {
+        let w = Paragraph::new(lines)
+            .block(block)
+            .wrap(Wrap { trim: false })
+            .alignment(Alignment::Left)
+            .style(content_style);
+        f.render_widget(w, area);
+        return;
+    }
+
+    let right_padding = 1usize;
+
+    for (i, p) in params.iter().copied().enumerate() {
+        let is_sel = i == ui.lfo_param_idx;
+
+        let val = match p {
+            LfoParam::Kind => ui.lfo.kind.name().to_string(),
+            LfoParam::RateHz => format!("{:.2}", ui.lfo.rate_hz),
+            LfoParam::Depth => format!("{:.2}", ui.lfo.depth),
+        };
+
+        let (label, hint) = p.label_and_hint();
+        let prefix = if is_sel { "› " } else { "  " };
+
+        let prefix_style = if is_sel {
+            Style::default().fg(kdr::ORANGE).bold()
+        } else {
+            Style::default().fg(kdr::MUTED)
+        };
+
+        let label_style = if is_sel {
+            Style::default().fg(kdr::FG).bold()
+        } else {
+            Style::default().fg(kdr::FG)
+        };
+
+        let hint_style = Style::default().fg(kdr::MUTED);
+
+        let value_style = if is_sel {
+            Style::default().fg(kdr::FG).bold()
+        } else {
+            Style::default().fg(kdr::FG)
+        };
+
+        let left_label = format!("{label} ");
+        let left_len = prefix.chars().count() + left_label.chars().count() + hint.chars().count();
+
+        let val_len = val.chars().count();
+        let min_gap = 2usize;
+
+        let usable_width = width.saturating_sub(right_padding);
+        let pad_len = usable_width.saturating_sub(left_len + min_gap + val_len);
+        let pad = " ".repeat(pad_len + min_gap);
+
+        lines.push(Line::from(vec![
+            Span::styled(prefix, prefix_style),
+            Span::styled(left_label, label_style),
+            Span::styled(hint, hint_style),
+            Span::raw(pad),
+            Span::styled(val, value_style),
+            Span::raw(" ".repeat(right_padding)),
+        ]));
+    }
+
+    let w = Paragraph::new(lines)
+        .block(block)
+        .wrap(Wrap { trim: false })
+        .alignment(Alignment::Left)
+        .style(content_style);
+
+    f.render_widget(w, area);
 }
 
 fn draw_logo(f: &mut ratatui::Frame, area: Rect) {
@@ -890,6 +1098,7 @@ fn draw_help(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
     let focus_name = match ui.focus {
         FocusPane::Waveforms => "Waveforms",
         FocusPane::Adsr => "ADSR",
+        FocusPane::Lfo => "LFO",
         FocusPane::Bottom => "Keyboard",
     };
 
@@ -928,9 +1137,7 @@ fn draw_help(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
         ),
     ]);
 
-    let w = Paragraph::new(vec![l1, l3])
-        .block(block)
-        .alignment(Alignment::Center)
+    let w = Paragraph::new(vec![Line::from(""), l1, l3])        .alignment(Alignment::Center)
         .wrap(Wrap { trim: true })
         .style(Style::default().bg(kdr::BG0));
 
