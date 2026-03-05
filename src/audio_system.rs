@@ -4,6 +4,7 @@ use device_query::Keycode;
 
 use crate::audio_patch::Generator;
 use crate::fx::adsr::Adsr;
+use crate::fx::lfo_amp::LfoAmp;
 
 /// current audio state that the UI can read (volume/mute + which source is active)
 #[derive(Debug, Clone)]
@@ -21,6 +22,7 @@ pub enum AudioCommand {
     SetPatch(Box<dyn Generator>),
     SetAdsr(Adsr),
     SetOctave(i32),
+    SetLFOAmp(LfoAmp)
 }
 
 /// handle used by the UI: send commands + subscribe to live snapshots
@@ -46,6 +48,9 @@ impl AudioHandle {
     }
     pub fn set_adsr(&self, adsr: Adsr) {
         let _ = self.tx.send(AudioCommand::SetAdsr(adsr));
+    }
+    pub fn set_lfoamp(&self, lfo: LfoAmp) {
+        let _ = self.tx.send(AudioCommand::SetLFOAmp(lfo));
     }
     pub fn subscribe(&self) -> watch::Receiver<AudioSnapshot> {
         self.snapshot_rx.clone()

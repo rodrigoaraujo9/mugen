@@ -6,14 +6,14 @@ use crate::audio_patch::{Node, SynthSource};
 use crate::patches::basic::BasicKind;
 use crate::fx::lfo::LfoOsc;
 
-pub struct LfoAmpNode {
+pub struct LfoAmp {
     pub kind: BasicKind,
     pub rate_hz: f32,  // LFO frequency
     pub depth: f32,
     pub base_gain: f32
 }
 
-impl LfoAmpNode {
+impl LfoAmp {
     pub fn new(kind: BasicKind, rate_hz: f32, depth: f32) -> Self {
         Self {
             kind,
@@ -24,7 +24,7 @@ impl LfoAmpNode {
     }
 }
 
-impl Node for LfoAmpNode {
+impl Node for LfoAmp {
     fn apply(&self, input: SynthSource) -> SynthSource {
         let sr = input.sample_rate();
         let kind = self.kind;

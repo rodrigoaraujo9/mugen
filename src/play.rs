@@ -20,7 +20,7 @@ use crate::key::Key;
 use crate::patches::basic::{basic_generator, BasicKind};
 use crate::audio_system;
 
-use crate::fx::lfo_amp::LfoAmpNode;
+use crate::fx::lfo_amp::LfoAmp;
 
 pub type ActiveNote = (Sink, Gate);
 
@@ -132,7 +132,7 @@ async fn play_note(play_state: &mut PlayState, rt: &RuntimeState, keycode: Keyco
     let adsr_node = AdsrNode::new(rt.adsr, SAMPLE_RATE, gate.clone());
     let mut src = adsr_node.apply(raw_src);
 
-    let lfo = LfoAmpNode::new(rt.lfo_kind, rt.lfo_rate_hz, rt.lfo_depth);
+    let lfo = LfoAmp::new(rt.lfo_kind, rt.lfo_rate_hz, rt.lfo_depth);
     src = lfo.apply(src);
 
     sink.append(src);
@@ -326,6 +326,14 @@ pub async fn run_audio(
 
                     audio_system::AudioCommand::SetAdsr(adsr) => {
                         rt.adsr = adsr;
+                        publish_snapshot(&snapshot_tx, &rt);
+                        restart_active_notes(&mut play_state, &rt).await;
+                    }
+
+                    audio_system::AudioCommand::SetLFOAmp(lfo) => {
+                        rt.lfo_depth = lfo.depth;
+                        rt.lfo_rate_hz = lfo.rate_hz;
+                        rt.lfo_kind = lfo.kind;
                         publish_snapshot(&snapshot_tx, &rt);
                         restart_active_notes(&mut play_state, &rt).await;
                     }
