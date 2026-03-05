@@ -6,7 +6,7 @@ pub struct Gain {
 }
 
 impl Gain {
-    fn new(gain:f32) -> Gain {
+    pub fn new(gain:f32) -> Gain {
         return Gain { gain };
     }
 }
