@@ -1,5 +1,9 @@
 update lfo commands to change kind and rate and whatever without recreating using premade functs in lfo
-
+make a shared state that holds params for adsr and lfo config and base gen wave type
+then audiocommand match in play (run_audio) will update those values dynamically
+update patches to allow for dynamic update
+make an audio command for each change so it is smooth
+atribute a atomic u32 for each basic kind so it is easier to toggle
 
 145-31 aspetct ratio for prints
 
