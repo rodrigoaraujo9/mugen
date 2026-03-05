@@ -20,6 +20,8 @@ use crate::key::Key;
 use crate::patches::basic::{basic_generator, BasicKind};
 use crate::audio_system;
 
+use crate::fx::lfo_amp::LfoAmpNode;
+
 pub type ActiveNote = (Sink, Gate);
 
 pub struct PlayState {
@@ -84,6 +86,10 @@ struct RuntimeState {
 
     held_keys: HashSet<Keycode>,
     octave_offset: i32,
+
+    lfo_kind: BasicKind,
+    lfo_rate_hz: f32,
+    lfo_depth: f32,
 }
 
 impl RuntimeState {
@@ -124,7 +130,10 @@ async fn play_note(play_state: &mut PlayState, rt: &RuntimeState, keycode: Keyco
     let raw_src = generator.create(freq);
 
     let adsr_node = AdsrNode::new(rt.adsr, SAMPLE_RATE, gate.clone());
-    let src = adsr_node.apply(raw_src);
+    let mut src = adsr_node.apply(raw_src);
+
+    let lfo = LfoAmpNode::new(rt.lfo_kind, rt.lfo_rate_hz, rt.lfo_depth);
+    src = lfo.apply(src);
 
     sink.append(src);
     play_state.active_sinks.entry(keycode).or_default().push((sink, gate));
@@ -169,6 +178,11 @@ pub async fn run_audio(
 
         held_keys: HashSet::new(),
         octave_offset: 0,
+
+        // place holders for now, to be updated by UI like ADSR
+        lfo_kind: BasicKind::Sine,
+        lfo_rate_hz: 10.0,
+        lfo_depth: 1.0,
     };
 
     let mut play_state = PlayState::new()?;

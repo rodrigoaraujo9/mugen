@@ -5,7 +5,7 @@ use crate::patches::basic::BasicKind;
 #[derive(Clone)]
 pub struct LfoOsc {
     kind: BasicKind,
-    phase: f32,     // [0, 1)
+    phase: f32,     // [0, 1) lfo position inside cycle
     phase_inc: f32, // cycles per sample
     rng: u64,       // only used for Noise
 }
@@ -33,9 +33,9 @@ impl LfoOsc {
         p
     }
 
+    //same as in basic kind
     #[inline]
     fn next_noise(&mut self) -> f32 {
-        // xorshift64*
         let mut x = self.rng;
         x ^= x >> 12;
         x ^= x << 25;
