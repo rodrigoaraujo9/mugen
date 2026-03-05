@@ -113,6 +113,8 @@ fn publish_snapshot(
         volume: rt.volume,
         muted: rt.muted,
         patch_name,
+        adsr: rt.adsr,
+        lfo: LfoAmp::new(rt.lfo_kind, rt.lfo_rate_hz, rt.lfo_depth),
     });
 }
 

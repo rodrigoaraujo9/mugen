@@ -6,6 +6,7 @@ use crate::audio_patch::{Node, SynthSource};
 use crate::patches::basic::BasicKind;
 use crate::fx::lfo::LfoOsc;
 
+#[derive(Debug, Clone, Copy)]
 pub struct LfoAmp {
     pub kind: BasicKind,
     pub rate_hz: f32,  // LFO frequency
