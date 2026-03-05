@@ -13,7 +13,7 @@ use tokio::{signal::ctrl_c, task};
 
 use crate::audio_patch::{Generator, Node};
 use crate::config::{
-    TICK, SAMPLE_RATE, ADSR_ATTACK_S, ADSR_DECAY_S, ADSR_SUSTAIN, ADSR_RELEASE_S,
+    ADSR_ATTACK_S, ADSR_DECAY_S, ADSR_RELEASE_S, ADSR_SUSTAIN, LFO_DEPTH, LFO_KIND, LFO_RATE_HZ, SAMPLE_RATE, TICK
 };
 use crate::fx::adsr::{Adsr, AdsrNode, Gate};
 use crate::key::Key;
@@ -180,9 +180,9 @@ pub async fn run_audio(
         octave_offset: 0,
 
         // place holders for now, to be updated by UI like ADSR
-        lfo_kind: BasicKind::Sine,
-        lfo_rate_hz: 10.0,
-        lfo_depth: 1.0,
+        lfo_kind: LFO_KIND,
+        lfo_rate_hz: LFO_RATE_HZ,
+        lfo_depth: LFO_DEPTH,
     };
 
     let mut play_state = PlayState::new()?;
