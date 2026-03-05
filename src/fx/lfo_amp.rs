@@ -58,11 +58,10 @@ impl Iterator for LfoAmpSource {
     fn next(&mut self) -> Option<f32> {
         let x = self.input.next()?;
 
+        self.lfo.sync_sr(self.input.sample_rate());
+
         let l = self.lfo.next();
-
-        // gain in [base*(1-depth), base*(1+depth)]
         let gain = self.base_gain * (1.0 + self.depth * l);
-
         Some(x * gain)
     }
 }

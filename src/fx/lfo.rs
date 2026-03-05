@@ -1,39 +1,71 @@
 use std::f32::consts::TAU;
-
 use crate::patches::basic::BasicKind;
 
 #[derive(Clone)]
 pub struct LfoOsc {
     kind: BasicKind,
     phase: f32,     // [0, 1) lfo position inside cycle
-    phase_inc: f32, // cycles per sample
+    rate_hz: f32,   // cycles per second
+    sr: u32,        // current sample rate
+    phase_inc: f32, // rate_hz / sr
     rng: u64,       // only used for Noise
 }
 
 impl LfoOsc {
     pub fn new(kind: BasicKind, rate_hz: f32, sr: u32) -> Self {
-        let sr_f = sr.max(1) as f32;
-        let rate = rate_hz.max(0.0);
-        Self {
+        let mut s = Self {
             kind,
             phase: 0.0,
-            phase_inc: rate / sr_f,
+            rate_hz: rate_hz.max(0.0),
+            sr: sr.max(1),
+            phase_inc: 0.0,
             rng: 0x1234_5678_9ABC_DEF0,
+        };
+        s.recalc();
+        s
+    }
+
+    #[inline]
+    fn recalc(&mut self) {
+        let sr_f = self.sr.max(1) as f32;
+        self.phase_inc = self.rate_hz.max(0.0) / sr_f;
+    }
+
+    #[inline]
+    pub fn sync_sr(&mut self, sr: u32) {
+        let sr = sr.max(1);
+        if sr != self.sr {
+            self.sr = sr;
+            self.recalc();
         }
+    }
+
+    /// update rate without recreating the oscillator
+    #[inline]
+    pub fn set_rate_hz(&mut self, rate_hz: f32) {
+        let r = rate_hz.max(0.0);
+        if (r - self.rate_hz).abs() > f32::EPSILON {
+            self.rate_hz = r;
+            self.recalc();
+        }
+    }
+
+    /// change waveform without recreating
+    #[inline]
+    pub fn set_kind(&mut self, kind: BasicKind) {
+        self.kind = kind;
     }
 
     #[inline]
     fn step_phase(&mut self) -> f32 {
         let p = self.phase;
         self.phase += self.phase_inc;
-        // [0, 1)
         if self.phase >= 1.0 {
             self.phase -= self.phase.floor();
         }
         p
     }
 
-    //same as in basic kind
     #[inline]
     fn next_noise(&mut self) -> f32 {
         let mut x = self.rng;
@@ -52,28 +84,13 @@ impl LfoOsc {
     #[inline]
     pub fn next(&mut self) -> f32 {
         match self.kind {
-            BasicKind::Sine => {
-                let p = self.step_phase();
-                (TAU * p).sin()
-            }
-            BasicKind::Square => {
-                let p = self.step_phase();
-                if p < 0.5 { 1.0 } else { -1.0 }
-            }
+            BasicKind::Sine => (TAU * self.step_phase()).sin(),
+            BasicKind::Square => if self.step_phase() < 0.5 { 1.0 } else { -1.0 },
             BasicKind::Triangle => {
                 let p = self.step_phase();
-                // [-1,1]
-                if p < 0.5 {
-                    -1.0 + 4.0 * p
-                } else {
-                    3.0 - 4.0 * p
-                }
+                if p < 0.5 { -1.0 + 4.0 * p } else { 3.0 - 4.0 * p }
             }
-            BasicKind::Saw => {
-                let p = self.step_phase();
-                // [-1,1]
-                2.0 * p - 1.0
-            }
+            BasicKind::Saw => 2.0 * self.step_phase() - 1.0,
             BasicKind::Noise => self.next_noise(),
         }
     }
