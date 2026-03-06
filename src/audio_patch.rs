@@ -1,7 +1,11 @@
 use rodio::Source;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool};
 
 /// boxed Rodio source producing mono `f32` samples, `Send` so it can live across threads
 pub type SynthSource = Box<dyn Source<Item = f32> + Send>;
+
+pub type Gate = Arc<AtomicBool>;
 
 /// an effect/processor that transforms one source into another (filter, gain, ADSR, etc)
 pub trait Node: Send + Sync {

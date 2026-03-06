@@ -6,7 +6,7 @@ pub struct LfoOsc {
     kind: BasicKind,
     phase: f32,     // [0, 1) lfo position inside cycle
     rate_hz: f32,   // cycles per second
-    sr: u32,        // current sample rate
+    sample_rate: u32,
     phase_inc: f32, // rate_hz / sr
     rng: u64,       // only used for Noise
 }
@@ -17,7 +17,7 @@ impl LfoOsc {
             kind,
             phase: 0.0,
             rate_hz: rate_hz.max(0.0),
-            sr: sr.max(1),
+            sample_rate: sr.max(1),
             phase_inc: 0.0,
             rng: 0x1234_5678_9ABC_DEF0,
         };
@@ -27,15 +27,15 @@ impl LfoOsc {
 
     #[inline]
     fn recalc(&mut self) {
-        let sr_f = self.sr.max(1) as f32;
+        let sr_f = self.sample_rate.max(1) as f32;
         self.phase_inc = self.rate_hz.max(0.0) / sr_f;
     }
 
     #[inline]
     pub fn sync_sr(&mut self, sr: u32) {
         let sr = sr.max(1);
-        if sr != self.sr {
-            self.sr = sr;
+        if sr != self.sample_rate {
+            self.sample_rate = sr;
             self.recalc();
         }
     }

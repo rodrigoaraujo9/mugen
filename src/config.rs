@@ -2,19 +2,19 @@ use tokio::time::Duration;
 
 use crate::{patches::basic::BasicKind};
 
-//play.rs
+// play.rs
 pub const TICK: u64 = 10;
 
-//key.rs
+// key.rs
 pub const BASE_FREQ: f32 = 440.0;
 pub const A4_SEMITONES: i32 = 57;
 pub const SEMITONES_PER_OCTAVE: i32 = 12;
 pub const KEYBOARD_BASE_OCTAVE: i32 = 4;
 
-//audio_source.rs
+// audio_source.rs
 pub const AMP_DEFAULT:f32 = 0.1;
 
-//patches
+// atches
 pub const SAMPLE_RATE: u32 = 48_000;
 pub const ENDLESS: Duration = Duration::from_secs(3600);
 

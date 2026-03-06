@@ -1,23 +1,17 @@
 use rodio::Source;
 use std::{
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
+    sync::{atomic::Ordering},
     time::Duration,
 };
 
-use crate::audio_patch::Node;
-
-pub type SynthSource = Box<dyn Source<Item = f32> + Send>;
-pub type Gate = Arc<AtomicBool>;
+use crate::audio_patch::{Gate, Node, SynthSource};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Adsr {
-    pub attack_s: f32, //sec
-    pub decay_s: f32, //sec
-    pub sustain: f32, //0..1
-    pub release_s: f32, //sec
+    pub attack_s: f32,   // sec
+    pub decay_s: f32,    // sec
+    pub sustain: f32,    // 0..1
+    pub release_s: f32,  // sec
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -26,12 +20,17 @@ pub struct AdsrEnvelope {
     pub attack_step: f32,
     pub decay_step: f32,
     pub release_step: f32,
-    pub release_samples: f32, // needed to calc release samples (given current amp early release)
+    pub release_samples: f32, // needed to calc release step from current amp on early release
 }
 
 impl Adsr {
     pub fn new(attack_s: f32, decay_s: f32, sustain: f32, release_s: f32) -> Self {
-        Self { attack_s, decay_s, sustain, release_s }
+        Self {
+            attack_s,
+            decay_s,
+            sustain,
+            release_s,
+        }
     }
 
     pub fn to_envelope(&self, sample_rate: u32) -> AdsrEnvelope {
@@ -54,7 +53,13 @@ impl Adsr {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Stage { Attack, Decay, Sustain, Release, Done }
+enum Stage {
+    Attack,
+    Decay,
+    Sustain,
+    Release,
+    Done,
+}
 
 pub struct AdsrNode {
     pub adsr: Adsr,
@@ -64,7 +69,11 @@ pub struct AdsrNode {
 
 impl AdsrNode {
     pub fn new(adsr: Adsr, sample_rate: u32, gate: Gate) -> Self {
-        Self { adsr, sample_rate, gate }
+        Self {
+            adsr,
+            sample_rate,
+            gate,
+        }
     }
 }
 
@@ -95,7 +104,7 @@ impl AdsrSource {
             && self.stage != Stage::Done
         {
             self.stage = Stage::Release;
-            self.envelope.release_step=self.current_amp/self.envelope.release_samples;
+            self.envelope.release_step = self.current_amp / self.envelope.release_samples;
         }
 
         match self.stage {
@@ -152,15 +161,34 @@ impl Iterator for AdsrSource {
 }
 
 impl Source for AdsrSource {
-    fn current_span_len(&self) -> Option<usize> { self.input.current_span_len() }
-    fn channels(&self) -> u16 { self.input.channels() }
-    fn sample_rate(&self) -> u32 { self.sample_rate }
-    fn total_duration(&self) -> Option<Duration> { None }
+    fn current_span_len(&self) -> Option<usize> {
+        self.input.current_span_len()
+    }
+
+    fn channels(&self) -> u16 {
+        self.input.channels()
+    }
+
+    fn sample_rate(&self) -> u32 {
+        self.sample_rate
+    }
+
+    fn total_duration(&self) -> Option<Duration> {
+        None
+    }
 }
 
 impl Node for AdsrNode {
     fn apply(&self, input: SynthSource) -> SynthSource {
-        Box::new(AdsrSource::new(input, self.adsr, self.sample_rate, self.gate.clone()))
+        Box::new(AdsrSource::new(
+            input,
+            self.adsr,
+            self.sample_rate,
+            self.gate.clone(),
+        ))
     }
-    fn name(&self) -> &'static str { "ADSR" }
+
+    fn name(&self) -> &'static str {
+        "ADSR"
+    }
 }
