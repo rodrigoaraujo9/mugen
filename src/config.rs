@@ -27,3 +27,6 @@ pub const ADSR_RELEASE_S: f32 = 1.0; //sec
 pub const LFO_KIND: BasicKind = BasicKind::Sine;
 pub const LFO_RATE_HZ: f32 = 10.0;
 pub const LFO_DEPTH: f32 = 1.0;
+
+// LowPass default
+pub const CUTOFF: f32 = 20000.0;

@@ -4,7 +4,8 @@ use device_query::Keycode;
 use crate::audio_patch::Generator;
 use crate::fx::adsr::Adsr;
 use crate::fx::lfo_amp::LfoAmp;
-use crate::config::{ADSR_ATTACK_S, ADSR_DECAY_S, ADSR_SUSTAIN, ADSR_RELEASE_S, LFO_KIND, LFO_RATE_HZ, LFO_DEPTH};
+use crate::config::{ADSR_ATTACK_S, ADSR_DECAY_S, ADSR_RELEASE_S, ADSR_SUSTAIN, CUTOFF, LFO_DEPTH, LFO_KIND, LFO_RATE_HZ};
+use crate::fx::lowpass::LowPass;
 
 /// current audio state that the UI can read (volume/mute + which source is active)
 #[derive(Debug, Clone)]
@@ -14,6 +15,7 @@ pub struct AudioSnapshot {
     pub patch_name: String,
     pub adsr: Adsr,
     pub lfo: LfoAmp,
+    pub lowpass: LowPass,
 }
 
 /// cmds that the UI sends to the audio runtime to change behavior
@@ -25,6 +27,7 @@ pub enum AudioCommand {
     SetAdsr(Adsr),
     SetOctave(i32),
     SetLFOAmp(LfoAmp),
+    SetLowPass(LowPass),
 }
 
 /// handle used by the UI: send commands + subscribe to live snapshots
@@ -43,6 +46,7 @@ impl AudioHandle {
     pub fn set_adsr(&self, adsr: Adsr) { let _ = self.tx.send(AudioCommand::SetAdsr(adsr)); }
     pub fn set_octave(&self, o: i32) { let _ = self.tx.send(AudioCommand::SetOctave(o)); }
     pub fn set_lfoamp(&self, lfo: LfoAmp) { let _ = self.tx.send(AudioCommand::SetLFOAmp(lfo)); }
+    pub fn set_lowpass(&self, lowpass: LowPass) {let _ = self.tx.send(AudioCommand::SetLowPass(lowpass));}
     pub fn subscribe(&self) -> watch::Receiver<AudioSnapshot> { self.snapshot_rx.clone() }
 }
 
@@ -70,6 +74,7 @@ pub async fn get_handle() -> &'static AudioHandle {
                 patch_name: "Sine".to_string(),
                 adsr: initial_adsr,
                 lfo: initial_lfo,
+                lowpass: LowPass::new(CUTOFF),
             };
 
             let (snapshot_tx, snapshot_rx) = watch::channel(initial);

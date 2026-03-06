@@ -8,6 +8,7 @@ use tokio::{signal::ctrl_c, task};
 use crate::audio_patch::{Gate, Generator, Node};
 use crate::config::{SAMPLE_RATE, TICK};
 use crate::fx::adsr::{Adsr, AdsrNode};
+use crate::fx::lowpass::LowPass;
 use crate::key::Key;
 use crate::patches::basic::{basic_generator, BasicKind};
 use crate::audio_system;
@@ -72,6 +73,7 @@ struct RuntimeState {
     muted: bool,
     adsr: Adsr,
     lfo: LfoAmp,
+    lowpass: LowPass,
 
     available_generators: Vec<Box<dyn Generator>>,
     current_gen_idx: usize,
@@ -103,6 +105,7 @@ fn publish_snapshot(
         patch_name,
         adsr: rt.adsr,
         lfo: rt.lfo,
+        lowpass: rt.lowpass,
     });
 }
 
@@ -123,6 +126,8 @@ async fn play_note(play_state: &mut PlayState, rt: &RuntimeState, keycode: Keyco
     let mut src = adsr_node.apply(raw_src);
 
     src = rt.lfo.apply(src);
+
+    src = rt.lowpass.apply(src);
 
     sink.append(src);
     play_state.active_sinks.entry(keycode).or_default().push((sink, gate));
@@ -156,6 +161,7 @@ pub async fn run_audio(
         muted: initial.muted,
         adsr: initial.adsr,
         lfo: initial.lfo,
+        lowpass: initial.lowpass,
 
         available_generators: vec![
             basic_generator(BasicKind::Sine),
@@ -317,6 +323,12 @@ pub async fn run_audio(
 
                     audio_system::AudioCommand::SetLFOAmp(lfo) => {
                         rt.lfo = lfo;
+                        publish_snapshot(&snapshot_tx, &rt);
+                        restart_active_notes(&mut play_state, &rt).await;
+                    }
+
+                    audio_system::AudioCommand::SetLowPass(lowpass) => {
+                        rt.lowpass = lowpass;
                         publish_snapshot(&snapshot_tx, &rt);
                         restart_active_notes(&mut play_state, &rt).await;
                     }
