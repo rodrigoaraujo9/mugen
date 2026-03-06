@@ -2,7 +2,7 @@
 
 I am building a **terminal-based synthesizer** in Rust.
 
-You can play it live from your computer keyboard, switch waveforms as you go, and layer notes like a real instrument. You can also create Wave Sources and Effects easily due to the generator -> chain of nodes architecture.
+You can play it live from your computer keyboard, switch waveforms as you go, mess with effects and layer notes like a real instrument. You can also create Wave Sources and Effects easily due to the generator -> chain of nodes architecture.
 
 Right now it focuses on:
 
@@ -46,10 +46,11 @@ You can rotate between them while playing.
 
 ---
 
-## Next steps (planned)
+## Next steps
 
 ### Short term
 
+- Make nodes and generator be configurable in real time without recreating patch
 - Audio capture and oscilator/audio wave visualization
 - Use **Lua** for config / scripting allowing user to have his own presets
 - Make patches and fx configurable and dynamically loadable (third-party friendly)
@@ -75,7 +76,7 @@ You can rotate between them while playing.
 
 ## Long-term idea
 
-A **CLI synth you can jam with friends**.
+A **terminal-based synth you can jam on with friends**.
 
 - Logic Pro compatibility
 - Encrypted P2P sessions
