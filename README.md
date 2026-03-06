@@ -12,6 +12,7 @@ Right now it focuses on:
 - adsr manipulation (hardcoded to amp)
 - dynamic LFO manipulation supporting any kind of wave and any kind of application (amp for now)
 - displaying in real time which keys are being played
+- implemented LPF (low pass filter), still no UI support
 
 ## Available waveforms
 
