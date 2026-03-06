@@ -11,11 +11,9 @@ use rodio::Sink;
 
 use tokio::{signal::ctrl_c, task};
 
-use crate::audio_patch::{Generator, Node};
-use crate::config::{
-    ADSR_ATTACK_S, ADSR_DECAY_S, ADSR_RELEASE_S, ADSR_SUSTAIN, LFO_DEPTH, LFO_KIND, LFO_RATE_HZ, SAMPLE_RATE, TICK
-};
-use crate::fx::adsr::{Adsr, AdsrNode, Gate};
+use crate::audio_patch::{Gate, Generator, Node};
+use crate::config::{SAMPLE_RATE, TICK};
+use crate::fx::adsr::{Adsr, AdsrNode};
 use crate::key::Key;
 use crate::patches::basic::{basic_generator, BasicKind};
 use crate::audio_system;
@@ -80,16 +78,13 @@ struct RuntimeState {
     volume: f32,
     muted: bool,
     adsr: Adsr,
+    lfo: LfoAmp,
 
     available_generators: Vec<Box<dyn Generator>>,
     current_gen_idx: usize,
 
     held_keys: HashSet<Keycode>,
     octave_offset: i32,
-
-    lfo_kind: BasicKind,
-    lfo_rate_hz: f32,
-    lfo_depth: f32,
 }
 
 impl RuntimeState {
@@ -114,7 +109,7 @@ fn publish_snapshot(
         muted: rt.muted,
         patch_name,
         adsr: rt.adsr,
-        lfo: LfoAmp::new(rt.lfo_kind, rt.lfo_rate_hz, rt.lfo_depth),
+        lfo: rt.lfo,
     });
 }
 
@@ -134,8 +129,7 @@ async fn play_note(play_state: &mut PlayState, rt: &RuntimeState, keycode: Keyco
     let adsr_node = AdsrNode::new(rt.adsr, SAMPLE_RATE, gate.clone());
     let mut src = adsr_node.apply(raw_src);
 
-    let lfo = LfoAmp::new(rt.lfo_kind, rt.lfo_rate_hz, rt.lfo_depth);
-    src = lfo.apply(src);
+    src = rt.lfo.apply(src);
 
     sink.append(src);
     play_state.active_sinks.entry(keycode).or_default().push((sink, gate));
@@ -167,7 +161,8 @@ pub async fn run_audio(
     let mut rt = RuntimeState {
         volume: initial.volume,
         muted: initial.muted,
-        adsr: Adsr::new(ADSR_ATTACK_S, ADSR_DECAY_S, ADSR_SUSTAIN, ADSR_RELEASE_S),
+        adsr: initial.adsr,
+        lfo: initial.lfo,
 
         available_generators: vec![
             basic_generator(BasicKind::Sine),
@@ -180,11 +175,6 @@ pub async fn run_audio(
 
         held_keys: HashSet::new(),
         octave_offset: 0,
-
-        // place holders for now, to be updated by UI like ADSR
-        lfo_kind: LFO_KIND,
-        lfo_rate_hz: LFO_RATE_HZ,
-        lfo_depth: LFO_DEPTH,
     };
 
     let mut play_state = PlayState::new()?;
@@ -333,9 +323,7 @@ pub async fn run_audio(
                     }
 
                     audio_system::AudioCommand::SetLFOAmp(lfo) => {
-                        rt.lfo_depth = lfo.depth;
-                        rt.lfo_rate_hz = lfo.rate_hz;
-                        rt.lfo_kind = lfo.kind;
+                        rt.lfo = lfo;
                         publish_snapshot(&snapshot_tx, &rt);
                         restart_active_notes(&mut play_state, &rt).await;
                     }

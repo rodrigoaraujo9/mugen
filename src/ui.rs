@@ -27,6 +27,7 @@ use ratatui::{
     Terminal,
 };
 use tokio::sync::{mpsc, watch};
+use tokio::time::sleep;
 
 use crate::audio_system::AudioHandle;
 use crate::fx::adsr::Adsr;
@@ -371,7 +372,7 @@ pub async fn run_ui(
                 }
             }
 
-            _ = tokio::time::sleep(Duration::from_millis(16)) => {}
+            _ = sleep(Duration::from_millis(16)) => {}
         }
     }
 

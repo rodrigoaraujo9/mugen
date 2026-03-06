@@ -1,4 +1,6 @@
-use std::{f32::consts::TAU, time::Duration};
+use std::{f32::consts::TAU};
+
+use std::time::Duration;
 
 use rodio::Source;
 
