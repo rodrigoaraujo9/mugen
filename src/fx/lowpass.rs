@@ -44,15 +44,6 @@ struct LowPassSource {
     prev_y: f32,
 }
 
-impl LowPassSource {
-    fn calc_alpha(sample_rate: f32, cutoff_hz: f32) -> f32 {
-        let cutoff_hz = cutoff_hz.clamp(1.0, sample_rate * 0.45);
-        let dt = 1.0 / sample_rate;
-        let tau = 1.0 / (TAU * cutoff_hz);
-        dt / (tau + dt)
-    }
-}
-
 impl Iterator for LowPassSource {
     type Item = f32;
 
