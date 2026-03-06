@@ -30,7 +30,6 @@ impl Node for LowPass {
 
         Box::new(LowPassSource {
             input,
-            cutoff_hz,
             alpha,
             prev_y: 0.0,
         })
@@ -43,7 +42,6 @@ impl Node for LowPass {
 
 struct LowPassSource {
     input: SynthSource,
-    cutoff_hz: f32,
     alpha: f32,
     prev_y: f32,
 }
@@ -62,9 +60,6 @@ impl Iterator for LowPassSource {
 
     fn next(&mut self) -> Option<f32> {
         let x = self.input.next()?;
-
-        let sr = self.input.sample_rate() as f32;
-        self.alpha = Self::calc_alpha(sr, self.cutoff_hz);
 
         let y = self.alpha * x + (1.0 - self.alpha) * self.prev_y;
         self.prev_y = y;
