@@ -1091,9 +1091,6 @@ fn draw_bottom(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
 }
 
 fn draw_help(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
-    let block = Block::default()
-        .border_style(Style::default().fg(kdr::BORDER))
-        .style(Style::default().bg(kdr::BG0));
 
     let focus_name = match ui.focus {
         FocusPane::Waveforms => "Waveforms",
