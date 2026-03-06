@@ -1,9 +1,5 @@
-use std::{f32::consts::TAU};
-
-use std::time::Duration;
-
 use rodio::Source;
-
+use std::{f32::consts::TAU, time::Duration};
 use crate::audio_patch::{Node, SynthSource};
 
 #[derive(Debug, Clone, Copy)]

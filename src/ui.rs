@@ -1,14 +1,13 @@
-use std::collections::HashSet;
-use std::io;
-use std::io::stdout;
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
+use std::{
+    collections::HashSet,
+    io,
+    io::stdout,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
 };
-use std::time::Duration;
-
-use device_query::Keycode;
-
 use crossterm::{
     event::{
         self, DisableFocusChange, EnableFocusChange, Event, KeyCode, KeyEvent, KeyEventKind,
@@ -17,6 +16,7 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use device_query::Keycode;
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -28,14 +28,10 @@ use ratatui::{
 };
 use tokio::sync::{mpsc, watch};
 use tokio::time::sleep;
-
 use crate::audio_system::AudioHandle;
 use crate::fx::adsr::Adsr;
-
-use crate::patches::basic::{basic_generator, BasicKind};
-
 use crate::fx::lfo_amp::LfoAmp;
-
+use crate::patches::basic::{basic_generator, BasicKind};
 
 #[allow(dead_code)]
 mod kdr {

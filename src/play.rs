@@ -1,23 +1,16 @@
 use device_query::{DeviceQuery, DeviceState, Keycode};
 use std::collections::{HashMap, HashSet};
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
-};
+use std::sync::{Arc,atomic::{AtomicBool, Ordering}};
 use std::time::Duration;
-
 use rodio::stream::{OutputStream, OutputStreamBuilder};
 use rodio::Sink;
-
 use tokio::{signal::ctrl_c, task};
-
 use crate::audio_patch::{Gate, Generator, Node};
 use crate::config::{SAMPLE_RATE, TICK};
 use crate::fx::adsr::{Adsr, AdsrNode};
 use crate::key::Key;
 use crate::patches::basic::{basic_generator, BasicKind};
 use crate::audio_system;
-
 use crate::fx::lfo_amp::LfoAmp;
 
 pub type ActiveNote = (Sink, Gate);

@@ -3,7 +3,6 @@ use std::{
     sync::{atomic::Ordering},
     time::Duration,
 };
-
 use crate::audio_patch::{Gate, Node, SynthSource};
 
 #[derive(Clone, Copy, Debug)]
