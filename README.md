@@ -6,7 +6,7 @@
 </div>
 
 <div align="center">
-    <img src="./images/mugen.gif" alt="Demo">
+    <img src="./assets/demo.gif" alt="Demo">
 </div> 
 
 ## About
@@ -51,5 +51,5 @@ You can rotate between them while playing.
 
 ## Screenshot
 
-![Intro](images/intro.png)
-![UI](images/ui.png)
+![Intro](assets/intro.png)
+![UI](assets/ui.png)
