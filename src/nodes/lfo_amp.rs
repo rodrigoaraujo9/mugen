@@ -1,8 +1,8 @@
 use std::time::Duration;
 use rodio::Source;
 use crate::audio_patch::{Node, SynthSource};
-use crate::patches::basic::BasicKind;
-use crate::fx::lfo::LfoOsc;
+use crate::generators::basic::BasicKind;
+use crate::nodes::lfo::LfoOsc;
 
 #[derive(Debug, Clone, Copy)]
 pub struct LfoAmp {

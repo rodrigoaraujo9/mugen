@@ -29,9 +29,9 @@ use ratatui::{
 use tokio::sync::{mpsc, watch};
 use tokio::time::sleep;
 use crate::audio_system::AudioHandle;
-use crate::fx::adsr::Adsr;
-use crate::fx::lfo_amp::LfoAmp;
-use crate::patches::basic::{basic_generator, BasicKind};
+use crate::nodes::adsr::Adsr;
+use crate::nodes::lfo_amp::LfoAmp;
+use crate::generators::basic::{basic_generator, BasicKind};
 
 #[allow(dead_code)]
 mod kdr {

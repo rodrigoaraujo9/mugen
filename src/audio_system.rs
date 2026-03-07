@@ -2,10 +2,10 @@ use tokio::sync::{mpsc, watch, OnceCell, Mutex};
 use std::collections::HashSet;
 use device_query::Keycode;
 use crate::audio_patch::Generator;
-use crate::fx::adsr::Adsr;
-use crate::fx::lfo_amp::LfoAmp;
+use crate::nodes::adsr::Adsr;
+use crate::nodes::lfo_amp::LfoAmp;
 use crate::config::{ADSR_ATTACK_S, ADSR_DECAY_S, ADSR_RELEASE_S, ADSR_SUSTAIN, CUTOFF, LFO_DEPTH, LFO_KIND, LFO_RATE_HZ};
-use crate::fx::lowpass::LowPass;
+use crate::nodes::lowpass::LowPass;
 
 /// current audio state that the UI can read (volume/mute + which source is active)
 #[derive(Debug, Clone)]

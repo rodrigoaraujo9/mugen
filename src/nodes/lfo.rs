@@ -1,5 +1,5 @@
 use std::f32::consts::TAU;
-use crate::patches::basic::BasicKind;
+use crate::generators::basic::BasicKind;
 
 #[derive(Clone)]
 pub struct LfoOsc {

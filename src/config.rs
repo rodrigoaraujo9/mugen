@@ -1,5 +1,5 @@
 use tokio::time::Duration;
-use crate::{patches::basic::BasicKind};
+use crate::{generators::basic::BasicKind};
 
 // play.rs
 pub const TICK: u64 = 10;

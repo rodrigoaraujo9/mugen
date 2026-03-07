@@ -7,12 +7,12 @@ use rodio::Sink;
 use tokio::{signal::ctrl_c, task};
 use crate::audio_patch::{Gate, Generator, Node};
 use crate::config::{SAMPLE_RATE, TICK};
-use crate::fx::adsr::{Adsr, AdsrNode};
-use crate::fx::lowpass::LowPass;
+use crate::nodes::adsr::{Adsr, AdsrNode};
+use crate::nodes::lowpass::LowPass;
 use crate::key::Key;
-use crate::patches::basic::{basic_generator, BasicKind};
+use crate::generators::basic::{basic_generator, BasicKind};
 use crate::audio_system;
-use crate::fx::lfo_amp::LfoAmp;
+use crate::nodes::lfo_amp::LfoAmp;
 
 pub type ActiveNote = (Sink, Gate);
 
@@ -74,10 +74,8 @@ struct RuntimeState {
     adsr: Adsr,
     lfo: LfoAmp,
     lowpass: LowPass,
-
     available_generators: Vec<Box<dyn Generator>>,
     current_gen_idx: usize,
-
     held_keys: HashSet<Keycode>,
     octave_offset: i32,
 }
