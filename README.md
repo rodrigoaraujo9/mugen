@@ -1,8 +1,19 @@
-# Mugen
+<br />
+<div align="center">
+  <h3 align="center">mugen</h3>
+  <p align="center">
+      A terminal-based synth in Rust.  </p>
+</div>
 
-I am building a **terminal-based synthesizer** in Rust.
+<div align="center">
+    <img src="./images/mugen.gif" alt="Demo">
+</div> 
 
-You can play it live from your computer keyboard, switch waveforms as you go, mess with effects and layer notes like a real instrument. You can also create Wave Sources and Effects easily due to the generator -> chain of nodes architecture.
+## About
+
+This is a passion project to learn more about how synthesizers used in music composition and production work (mathematically) as well as dive into real-time systems in Rust. Synthesisers do a lot of compute and require that there is no noticeble latency from when keys are pressed or released to when the sound is played or stops. Therefore I am finding this quite a nice challenge!
+
+You can play it live from your computer keyboard, switch waveforms as you go, mess with effects and layer notes like a real instrument. You can also create new wave sources and effects and mix them up easily.
 
 Right now it focuses on:
 
@@ -11,8 +22,8 @@ Right now it focuses on:
 - switching sound character while notes are held
 - adsr manipulation (hardcoded to amp)
 - dynamic LFO manipulation supporting any kind of wave and any kind of application (amp for now)
+- LPF manipulation (low pass filter), still no UI support
 - displaying in real time which keys are being played
-- implemented LPF (low pass filter), still no UI support
 
 ## Available waveforms
 
@@ -31,66 +42,14 @@ You can rotate between them while playing.
 - Use **TAB** and arrow buttons to navigate and play around with values
 - Press **Q** or **Ctrl+C** to quit
 
-## Screenshot
-
-![Intro](images/intro.png)
-![UI](images/ui.png)
-
----
-
-## How it works (very simply)
+## Architecture
 
 - **Generator** → produces sound (sine, saw, etc.)
 - **Node** → changes sound (filters, effects, modulation)
 - **PatchSource** → generator + chain of nodes
 - The synth just plays the current patch for each key you press
 
----
+## Screenshot
 
-## Next steps
-
-### Short term
-
-- Make nodes and generator be configurable in real time without recreating patch
-- Audio capture and oscilator/audio wave visualization
-- Use **Lua** for config / scripting allowing user to have his own presets
-- Make patches and fx configurable and dynamically loadable (third-party friendly)
-- Add essential fx (phase distortion, cutoff, etc.)
-
-### Synth improvements
-
-- One sink per voice with a **dynamic mixer** (instead of many sinks) ??
-- Proper (not hardcoded) **envelope controls**  
-  (attack, decay, sustain, release)
-- Unison, detune, LFO, glide/portamento
-- Mono / poly modes
-- Effects (reverb, delay, distortion, flanger, phaser)
-
-### UI
-
-- Ratatui UI with:
-    - knobs/sliders for synth parameters
-    - support for real keyboard + MIDI input
-    - visualizers (waveform, volume, spectrum)
-
----
-
-## Long-term idea
-
-A **terminal-based synth you can jam on with friends**.
-
-- Logic Pro compatibility
-- Encrypted P2P sessions
-- Everyone hears what everyone plays (like a band)
-- Each player can bind sounds to keys
-- Record the whole session to WAV
-- Choose a key and only allow to play notes that belong to it
-
-### Architecture idea
-
-- Audio thread (real-time, high priority)
-- Network thread (async, P2P)
-- Lock-free ring buffers between them
-- Low-latency streaming (<50ms target)
-
-Session owner mixes audio and distributes it back to peers.
+![Intro](images/intro.png)
+![UI](images/ui.png)
