@@ -1,6 +1,6 @@
 use rodio::Source;
 use std::{f32::consts::TAU, time::Duration};
-use crate::audio_patch::{Node, SynthSource};
+use crate::patch::{Node, SynthSource};
 
 #[derive(Debug, Clone, Copy)]
 pub struct LowPass {

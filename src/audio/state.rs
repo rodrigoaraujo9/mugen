@@ -1,0 +1,66 @@
+use std::collections::HashSet;
+use device_query::Keycode;
+use tokio::sync::{mpsc, watch, Mutex, OnceCell};
+use super::handle::AudioHandle;
+use super::types::{AudioCommand, AudioSnapshot};
+use crate::config::{
+    ADSR_ATTACK_S, ADSR_DECAY_S, ADSR_RELEASE_S, ADSR_SUSTAIN, CUTOFF, LFO_DEPTH, LFO_KIND,
+    LFO_RATE_HZ,
+};
+use crate::nodes::adsr::Adsr;
+use crate::nodes::lfo_amp::LfoAmp;
+use crate::nodes::lowpass::LowPass;
+
+/// internal singleton state
+pub struct AudioSystem {
+    pub handle: AudioHandle,
+    pub cmd_rx: Mutex<Option<mpsc::UnboundedReceiver<AudioCommand>>>,
+    pub snapshot_tx: watch::Sender<AudioSnapshot>,
+    pub held_keys_tx: watch::Sender<HashSet<Keycode>>,
+}
+
+pub static AUDIO: OnceCell<AudioSystem> = OnceCell::const_new();
+
+pub async fn get_handle() -> &'static AudioHandle {
+    &AUDIO
+        .get_or_init(|| async {
+            let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
+
+            let initial_adsr = Adsr::new(ADSR_ATTACK_S, ADSR_DECAY_S, ADSR_SUSTAIN, ADSR_RELEASE_S);
+            let initial_lfo  = LfoAmp::new(LFO_KIND, LFO_RATE_HZ, LFO_DEPTH);
+
+            let initial = AudioSnapshot {
+                volume: 1.0,
+                muted: false,
+                patch_name: "Sine".to_string(),
+                adsr: initial_adsr,
+                lfo: initial_lfo,
+                lowpass: LowPass::new(CUTOFF),
+            };
+
+            let (snapshot_tx, snapshot_rx) = watch::channel(initial);
+            let (held_keys_tx, held_keys_rx) = watch::channel(HashSet::new());
+
+            AudioSystem {
+                handle: AudioHandle { tx: cmd_tx, snapshot_rx, held_keys_rx },
+                cmd_rx: Mutex::new(Some(cmd_rx)),
+                snapshot_tx,
+                held_keys_tx,
+            }
+        })
+        .await
+        .handle
+}
+
+pub async fn take_runtime_channels() -> (
+    mpsc::UnboundedReceiver<AudioCommand>,
+    watch::Sender<AudioSnapshot>,
+    watch::Sender<HashSet<Keycode>>,
+    AudioSnapshot,
+) {
+    let sys = AUDIO.get_or_init(|| async { unreachable!("call get_handle() first") }).await;
+    let mut guard = sys.cmd_rx.lock().await;
+    let rx = guard.take().expect("audio runtime already taken");
+    let initial = sys.snapshot_tx.borrow().clone();
+    (rx, sys.snapshot_tx.clone(), sys.held_keys_tx.clone(), initial)
+}

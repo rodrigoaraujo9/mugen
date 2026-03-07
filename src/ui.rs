@@ -28,7 +28,7 @@ use ratatui::{
 };
 use tokio::sync::{mpsc, watch};
 use tokio::time::sleep;
-use crate::audio_system::AudioHandle;
+use crate::audio::AudioHandle;
 use crate::nodes::adsr::Adsr;
 use crate::nodes::lfo_amp::LfoAmp;
 use crate::generators::basic::{basic_generator, BasicKind};

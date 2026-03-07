@@ -1,6 +1,6 @@
 use std::time::Duration;
 use rodio::Source;
-use crate::audio_patch::{Node, SynthSource};
+use crate::patch::{Node, SynthSource};
 use crate::generators::basic::BasicKind;
 use crate::nodes::lfo::LfoOsc;
 

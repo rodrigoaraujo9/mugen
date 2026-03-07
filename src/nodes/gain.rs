@@ -1,5 +1,5 @@
 use rodio::Source;
-use crate::audio_patch::Node;
+use crate::patch::Node;
 
 pub struct Gain {
     gain: f32,
@@ -12,7 +12,7 @@ impl Gain {
 }
 
 impl Node for  Gain{
-    fn apply(&self, input: crate::audio_patch::SynthSource) -> crate::audio_patch::SynthSource {
+    fn apply(&self, input: crate::patch::SynthSource) -> crate::patch::SynthSource {
         Box::new(input.amplify(self.gain))
     }
     fn name(&self) -> &'static str {

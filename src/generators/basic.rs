@@ -1,7 +1,7 @@
 use std::time::Duration;
 use rodio::Source;
 use rodio::source::{SineWave, SquareWave, TriangleWave, SawtoothWave};
-use crate::audio_patch::{Generator, SynthSource};
+use crate::patch::{Generator, SynthSource};
 use crate::config::{AMP_DEFAULT, ENDLESS, SAMPLE_RATE};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
