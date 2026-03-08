@@ -82,7 +82,7 @@ impl LfoOsc {
 
     /// returns LFO value in [-1, +1]
     #[inline]
-    pub fn next(&mut self) -> f32 {
+    pub fn next_value(&mut self) -> f32 {
         match self.kind {
             BasicKind::Sine => (TAU * self.step_phase()).sin(),
             BasicKind::Square => if self.step_phase() < 0.5 { 1.0 } else { -1.0 },

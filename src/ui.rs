@@ -477,7 +477,7 @@ fn draw_intro(f: &mut ratatui::Frame) {
             let mut owned = s.to_string();
             let pad = max_w.saturating_sub(owned.chars().count());
             if pad > 0 {
-                owned.extend(std::iter::repeat(' ').take(pad));
+                owned.extend(std::iter::repeat_n(' ', pad));
             }
             Line::from(Span::raw(owned).bold())
         })

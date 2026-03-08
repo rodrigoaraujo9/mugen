@@ -1,4 +1,5 @@
 use device_query::Keycode;
+use std::fmt;
 use crate::config::{BASE_FREQ, A4_SEMITONES, SEMITONES_PER_OCTAVE, KEYBOARD_BASE_OCTAVE};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -152,8 +153,10 @@ impl Key {
     pub fn from_keycode(keycode: Keycode) -> Option<Self> {
         key_from_keycode(keycode)
     }
+}
 
-    pub fn to_string(self) -> String {
-        key_to_string(self)
+impl fmt::Display for Key {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", key_to_string(*self))
     }
 }

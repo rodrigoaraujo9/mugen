@@ -14,7 +14,7 @@ pub enum BasicKind {
 }
 
 impl BasicKind {
-    pub fn next(self) -> Self {
+    pub fn toggle(self) -> Self {
         match self {
             BasicKind::Sine => BasicKind::Saw,
             BasicKind::Saw => BasicKind::Square,

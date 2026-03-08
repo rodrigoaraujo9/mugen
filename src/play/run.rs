@@ -35,7 +35,7 @@ async fn play_note(play_state: &mut PlayState, rt: &RuntimeState, keycode: Keyco
     let Some(key) = Key::from_keycode(keycode) else { return; };
     let freq = key.transpose(rt.octave_offset * 12).frequency();
     let gate: Gate = Arc::new(AtomicBool::new(true));
-    let sink = Sink::connect_new(&play_state.stream.mixer());
+    let sink = Sink::connect_new(play_state.stream.mixer());
     sink.set_volume(rt.volume);
     if rt.muted { sink.pause(); }
     let Some(generator) = rt.current_generator() else { return; };

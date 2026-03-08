@@ -59,7 +59,7 @@ impl Iterator for LfoAmpSource {
 
         self.lfo.sync_sr(self.input.sample_rate());
 
-        let l = self.lfo.next();
+        let l = self.lfo.next_value();
         let gain = self.base_gain * (1.0 + self.depth * l);
         Some(x * gain)
     }
