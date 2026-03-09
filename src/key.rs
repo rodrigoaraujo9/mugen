@@ -1,12 +1,13 @@
+use crate::config::{A4_SEMITONES, BASE_FREQ, KEYBOARD_BASE_OCTAVE, SEMITONES_PER_OCTAVE};
 use device_query::Keycode;
 use std::fmt;
-use crate::config::{BASE_FREQ, A4_SEMITONES, SEMITONES_PER_OCTAVE, KEYBOARD_BASE_OCTAVE};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum Note {
     C = 0,
     Db = 1,
+
     D = 2,
     Eb = 3,
     E = 4,

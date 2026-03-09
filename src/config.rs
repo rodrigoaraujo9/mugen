@@ -1,5 +1,5 @@
+use crate::generators::basic::BasicKind;
 use tokio::time::Duration;
-use crate::{generators::basic::BasicKind};
 
 // play.rs
 pub const TICK: u64 = 10;
@@ -11,16 +11,16 @@ pub const SEMITONES_PER_OCTAVE: i32 = 12;
 pub const KEYBOARD_BASE_OCTAVE: i32 = 4;
 
 // audio_source.rs
-pub const AMP_DEFAULT:f32 = 0.1;
+pub const AMP_DEFAULT: f32 = 0.1;
 
 // atches
 pub const SAMPLE_RATE: u32 = 48_000;
 pub const ENDLESS: Duration = Duration::from_secs(3600);
 
 // ADSR defaults
-pub const ADSR_ATTACK_S: f32  = 0.5; //sec
-pub const ADSR_DECAY_S: f32   = 0.5; //sec
-pub const ADSR_SUSTAIN: f32   = 0.4; //0..1
+pub const ADSR_ATTACK_S: f32 = 0.5; //sec
+pub const ADSR_DECAY_S: f32 = 0.5; //sec
+pub const ADSR_SUSTAIN: f32 = 0.4; //0..1
 pub const ADSR_RELEASE_S: f32 = 1.0; //sec
 
 // LFO defaults

@@ -1,6 +1,6 @@
+use crate::patch::{Node, SynthSource};
 use rodio::Source;
 use std::{f32::consts::TAU, time::Duration};
-use crate::patch::{Node, SynthSource};
 
 #[derive(Debug, Clone, Copy)]
 pub struct LowPass {

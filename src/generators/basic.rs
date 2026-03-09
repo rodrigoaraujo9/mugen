@@ -1,8 +1,8 @@
-use std::time::Duration;
-use rodio::Source;
-use rodio::source::{SineWave, SquareWave, TriangleWave, SawtoothWave};
-use crate::patch::{Generator, SynthSource};
 use crate::config::{AMP_DEFAULT, ENDLESS, SAMPLE_RATE};
+use crate::patch::{Generator, SynthSource};
+use rodio::Source;
+use rodio::source::{SawtoothWave, SineWave, SquareWave, TriangleWave};
+use std::time::Duration;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BasicKind {
@@ -94,7 +94,9 @@ impl Generator for BasicGenerator {
             ),
 
             BasicKind::Noise => {
-                let p = self.noise.expect("Noise params missing for BasicKind::Noise");
+                let p = self
+                    .noise
+                    .expect("Noise params missing for BasicKind::Noise");
                 Box::new(
                     NoiseGen::new(p.seed, p.sample_rate)
                         .amplify(self.amplitude)
@@ -135,12 +137,22 @@ impl NoiseGen {
 
 impl Iterator for NoiseGen {
     type Item = f32;
-    fn next(&mut self) -> Option<f32> { Some(self.next_noise()) }
+    fn next(&mut self) -> Option<f32> {
+        Some(self.next_noise())
+    }
 }
 
 impl Source for NoiseGen {
-    fn current_span_len(&self) -> Option<usize> { None }
-    fn channels(&self) -> u16 { 1 }
-    fn sample_rate(&self) -> u32 { self.sr }
-    fn total_duration(&self) -> Option<Duration> { None }
+    fn current_span_len(&self) -> Option<usize> {
+        None
+    }
+    fn channels(&self) -> u16 {
+        1
+    }
+    fn sample_rate(&self) -> u32 {
+        self.sr
+    }
+    fn total_duration(&self) -> Option<Duration> {
+        None
+    }
 }

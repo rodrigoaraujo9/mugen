@@ -1,6 +1,6 @@
 use rodio::Source;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool};
+use std::sync::atomic::AtomicBool;
 
 /// boxed Rodio source producing mono `f32` samples, `Send` so it can live across threads
 pub type SynthSource = Box<dyn Source<Item = f32> + Send>;
@@ -27,7 +27,10 @@ pub struct PatchSource {
 
 impl PatchSource {
     pub fn new(generator: Box<dyn Generator>) -> Self {
-        Self { generator, nodes: vec![] }
+        Self {
+            generator,
+            nodes: vec![],
+        }
     }
 
     pub fn push_node(mut self, node: Box<dyn Node>) -> Self {

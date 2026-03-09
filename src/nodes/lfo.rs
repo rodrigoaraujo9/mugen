@@ -1,11 +1,11 @@
-use std::f32::consts::TAU;
 use crate::generators::basic::BasicKind;
+use std::f32::consts::TAU;
 
 #[derive(Clone)]
 pub struct LfoOsc {
     kind: BasicKind,
-    phase: f32,     // [0, 1) lfo position inside cycle
-    rate_hz: f32,   // cycles per second
+    phase: f32,   // [0, 1) lfo position inside cycle
+    rate_hz: f32, // cycles per second
     sample_rate: u32,
     phase_inc: f32, // rate_hz / sr
     rng: u64,       // only used for Noise
@@ -85,10 +85,20 @@ impl LfoOsc {
     pub fn next_value(&mut self) -> f32 {
         match self.kind {
             BasicKind::Sine => (TAU * self.step_phase()).sin(),
-            BasicKind::Square => if self.step_phase() < 0.5 { 1.0 } else { -1.0 },
+            BasicKind::Square => {
+                if self.step_phase() < 0.5 {
+                    1.0
+                } else {
+                    -1.0
+                }
+            }
             BasicKind::Triangle => {
                 let p = self.step_phase();
-                if p < 0.5 { -1.0 + 4.0 * p } else { 3.0 - 4.0 * p }
+                if p < 0.5 {
+                    -1.0 + 4.0 * p
+                } else {
+                    3.0 - 4.0 * p
+                }
             }
             BasicKind::Saw => 2.0 * self.step_phase() - 1.0,
             BasicKind::Noise => self.next_noise(),

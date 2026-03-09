@@ -1,22 +1,22 @@
+use crate::audio::{self, AudioCommand};
+use crate::config::{SAMPLE_RATE, TICK};
+use crate::generators::basic::{BasicKind, basic_generator};
+use crate::key::Key;
+use crate::nodes::adsr::AdsrNode;
+use crate::patch::{Gate, Node};
+use crate::play::state::{PlayState, RuntimeState};
 use device_query::{DeviceQuery, DeviceState, Keycode};
+use rodio::Sink;
 use std::collections::HashSet;
-use std::sync::{Arc,atomic::{AtomicBool, Ordering}};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 use std::thread::sleep;
 use std::time::Duration;
-use rodio::Sink;
 use tokio::{signal::ctrl_c, task};
-use crate::patch::{Gate, Node};
-use crate::config::{SAMPLE_RATE, TICK};
-use crate::nodes::adsr::AdsrNode;
-use crate::key::Key;
-use crate::generators::basic::{basic_generator, BasicKind};
-use crate::audio::{self, AudioCommand};
-use crate::play::state::{PlayState, RuntimeState};
 
-fn publish_snapshot(
-    tx: &tokio::sync::watch::Sender<audio::AudioSnapshot>,
-    rt: &RuntimeState,
-) {
+fn publish_snapshot(tx: &tokio::sync::watch::Sender<audio::AudioSnapshot>, rt: &RuntimeState) {
     let patch_name = rt
         .current_generator()
         .map(|g| g.name().to_string())
@@ -32,20 +32,30 @@ fn publish_snapshot(
 }
 
 async fn play_note(play_state: &mut PlayState, rt: &RuntimeState, keycode: Keycode) {
-    let Some(key) = Key::from_keycode(keycode) else { return; };
+    let Some(key) = Key::from_keycode(keycode) else {
+        return;
+    };
     let freq = key.transpose(rt.octave_offset * 12).frequency();
     let gate: Gate = Arc::new(AtomicBool::new(true));
     let sink = Sink::connect_new(play_state.stream.mixer());
     sink.set_volume(rt.volume);
-    if rt.muted { sink.pause(); }
-    let Some(generator) = rt.current_generator() else { return; };
+    if rt.muted {
+        sink.pause();
+    }
+    let Some(generator) = rt.current_generator() else {
+        return;
+    };
     let raw_src = generator.create(freq);
     let adsr_node = AdsrNode::new(rt.adsr, SAMPLE_RATE, gate.clone());
     let mut src = adsr_node.apply(raw_src);
     src = rt.lfo.apply(src);
     src = rt.lowpass.apply(src);
     sink.append(src);
-    play_state.active_sinks.entry(keycode).or_default().push((sink, gate));
+    play_state
+        .active_sinks
+        .entry(keycode)
+        .or_default()
+        .push((sink, gate));
 }
 
 async fn restart_active_notes(play_state: &mut PlayState, rt: &RuntimeState) {
@@ -57,7 +67,9 @@ async fn restart_active_notes(play_state: &mut PlayState, rt: &RuntimeState) {
 
 fn cycle_patch(rt: &mut RuntimeState) {
     let n = rt.available_generators.len();
-    if n == 0 { return; }
+    if n == 0 {
+        return;
+    }
     rt.current_gen_idx = (rt.current_gen_idx + 1) % n;
 }
 
@@ -66,8 +78,7 @@ pub async fn run_audio(
     focused: Arc<AtomicBool>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let _handle = audio::get_handle().await.clone();
-    let (mut cmd_rx, snapshot_tx, held_keys_tx, initial) =
-        audio::take_runtime_channels().await;
+    let (mut cmd_rx, snapshot_tx, held_keys_tx, initial) = audio::take_runtime_channels().await;
     let mut rt = RuntimeState {
         volume: initial.volume,
         muted: initial.muted,

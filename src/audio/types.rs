@@ -1,7 +1,7 @@
-use crate::patch::Generator;
 use crate::nodes::adsr::Adsr;
 use crate::nodes::lfo_amp::LfoAmp;
 use crate::nodes::lowpass::LowPass;
+use crate::patch::Generator;
 
 /// current audio state that the UI can read (volume/mute + which source is active)
 #[derive(Debug, Clone)]

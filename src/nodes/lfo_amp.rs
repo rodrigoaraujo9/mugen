@@ -1,15 +1,15 @@
-use std::time::Duration;
-use rodio::Source;
-use crate::patch::{Node, SynthSource};
 use crate::generators::basic::BasicKind;
 use crate::nodes::lfo::LfoOsc;
+use crate::patch::{Node, SynthSource};
+use rodio::Source;
+use std::time::Duration;
 
 #[derive(Debug, Clone, Copy)]
 pub struct LfoAmp {
     pub kind: BasicKind,
-    pub rate_hz: f32,  // LFO frequency
+    pub rate_hz: f32, // LFO frequency
     pub depth: f32,
-    pub base_gain: f32
+    pub base_gain: f32,
 }
 
 impl LfoAmp {

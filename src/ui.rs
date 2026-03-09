@@ -3,8 +3,8 @@ use std::{
     io,
     io::stdout,
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
+        atomic::{AtomicBool, Ordering},
     },
     time::Duration,
 };
@@ -15,26 +15,26 @@ use crossterm::{
         KeyModifiers,
     },
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 
 use device_query::Keycode;
 
 use ratatui::{
+    Terminal,
     backend::CrosstermBackend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     prelude::Stylize,
     style::Style,
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
-    Terminal,
 };
 
 use tokio::sync::{mpsc, watch};
 use tokio::time::sleep;
 
 use crate::audio::AudioHandle;
-use crate::generators::basic::{basic_generator, BasicKind};
+use crate::generators::basic::{BasicKind, basic_generator};
 use crate::nodes::adsr::Adsr;
 use crate::nodes::lfo_amp::LfoAmp;
 use crate::nodes::lowpass::LowPass;
@@ -677,7 +677,11 @@ fn draw_ui(f: &mut ratatui::Frame, ui: &UiState) {
 
     let main = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(5), Constraint::Min(0), Constraint::Length(3)])
+        .constraints([
+            Constraint::Length(5),
+            Constraint::Min(0),
+            Constraint::Length(3),
+        ])
         .split(inner);
 
     let logo_area = main[0];
@@ -1324,7 +1328,15 @@ fn draw_bottom(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
     let buf = f.buffer_mut();
 
     let bg = Style::default().bg(kdr::BG0);
-    fill_rect(buf, bounds, bounds.x, bounds.y, bounds.width, bounds.height, bg);
+    fill_rect(
+        buf,
+        bounds,
+        bounds.x,
+        bounds.y,
+        bounds.width,
+        bounds.height,
+        bg,
+    );
 
     let white_bg = if focused { kdr::FG } else { kdr::BORDER };
     let white_fill = Style::default().bg(white_bg).fg(kdr::BG0);
@@ -1360,7 +1372,15 @@ fn draw_bottom(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
             continue;
         }
         let x = (x0 + i * white_w) as u16;
-        fill_rect(buf, bounds, x, bounds.y, white_w as u16, bounds.height, orange_fill);
+        fill_rect(
+            buf,
+            bounds,
+            x,
+            bounds.y,
+            white_w as u16,
+            bounds.height,
+            orange_fill,
+        );
     }
 
     for i in 0..(n_white - 1) {
@@ -1415,7 +1435,11 @@ fn draw_bottom(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
 
         let lx = x + (w / 2);
         let ly = y + h - 1;
-        if lx >= bounds.x && lx < bounds.x + bounds.width && ly >= bounds.y && ly < bounds.y + bounds.height {
+        if lx >= bounds.x
+            && lx < bounds.x + bounds.width
+            && ly >= bounds.y
+            && ly < bounds.y + bounds.height
+        {
             let st = if pressed {
                 Style::default().fg(kdr::BG0).bg(kdr::ORANGE).bold()
             } else {

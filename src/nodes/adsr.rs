@@ -1,16 +1,13 @@
-use rodio::Source;
-use std::{
-    sync::{atomic::Ordering},
-    time::Duration,
-};
 use crate::patch::{Gate, Node, SynthSource};
+use rodio::Source;
+use std::{sync::atomic::Ordering, time::Duration};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Adsr {
-    pub attack_s: f32,   // sec
-    pub decay_s: f32,    // sec
-    pub sustain: f32,    // 0..1
-    pub release_s: f32,  // sec
+    pub attack_s: f32,  // sec
+    pub decay_s: f32,   // sec
+    pub sustain: f32,   // 0..1
+    pub release_s: f32, // sec
 }
 
 #[derive(Clone, Copy, Debug)]

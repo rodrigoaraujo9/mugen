@@ -1,12 +1,12 @@
-use device_query::Keycode;
-use std::collections::{HashMap, HashSet};
-use std::sync::atomic::Ordering;
-use rodio::stream::{OutputStream, OutputStreamBuilder};
-use rodio::Sink;
-use crate::patch::{Gate, Generator};
 use crate::nodes::adsr::Adsr;
 use crate::nodes::lfo_amp::LfoAmp;
 use crate::nodes::lowpass::LowPass;
+use crate::patch::{Gate, Generator};
+use device_query::Keycode;
+use rodio::Sink;
+use rodio::stream::{OutputStream, OutputStreamBuilder};
+use std::collections::{HashMap, HashSet};
+use std::sync::atomic::Ordering;
 
 pub type ActiveNote = (Sink, Gate);
 
@@ -18,7 +18,10 @@ pub struct PlayState {
 impl PlayState {
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
         let stream = OutputStreamBuilder::open_default_stream()?;
-        Ok(Self { stream, active_sinks: HashMap::new() })
+        Ok(Self {
+            stream,
+            active_sinks: HashMap::new(),
+        })
     }
 
     pub fn stop_note(&mut self, keycode: Keycode) {
@@ -56,7 +59,11 @@ impl PlayState {
     pub fn set_all_muted(&mut self, muted: bool) {
         for (_k, voices) in self.active_sinks.iter_mut() {
             for (sink, _gate) in voices.iter_mut() {
-                if muted { sink.pause(); } else { sink.play(); }
+                if muted {
+                    sink.pause();
+                } else {
+                    sink.play();
+                }
             }
         }
     }

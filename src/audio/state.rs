@@ -1,6 +1,3 @@
-use std::collections::HashSet;
-use device_query::Keycode;
-use tokio::sync::{mpsc, watch, Mutex, OnceCell};
 use super::handle::AudioHandle;
 use super::types::{AudioCommand, AudioSnapshot};
 use crate::config::{
@@ -10,6 +7,9 @@ use crate::config::{
 use crate::nodes::adsr::Adsr;
 use crate::nodes::lfo_amp::LfoAmp;
 use crate::nodes::lowpass::LowPass;
+use device_query::Keycode;
+use std::collections::HashSet;
+use tokio::sync::{Mutex, OnceCell, mpsc, watch};
 
 /// internal singleton state
 pub struct AudioSystem {
@@ -27,7 +27,7 @@ pub async fn get_handle() -> &'static AudioHandle {
             let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
 
             let initial_adsr = Adsr::new(ADSR_ATTACK_S, ADSR_DECAY_S, ADSR_SUSTAIN, ADSR_RELEASE_S);
-            let initial_lfo  = LfoAmp::new(LFO_KIND, LFO_RATE_HZ, LFO_DEPTH);
+            let initial_lfo = LfoAmp::new(LFO_KIND, LFO_RATE_HZ, LFO_DEPTH);
 
             let initial = AudioSnapshot {
                 volume: 1.0,
@@ -42,7 +42,11 @@ pub async fn get_handle() -> &'static AudioHandle {
             let (held_keys_tx, held_keys_rx) = watch::channel(HashSet::new());
 
             AudioSystem {
-                handle: AudioHandle { tx: cmd_tx, snapshot_rx, held_keys_rx },
+                handle: AudioHandle {
+                    tx: cmd_tx,
+                    snapshot_rx,
+                    held_keys_rx,
+                },
                 cmd_rx: Mutex::new(Some(cmd_rx)),
                 snapshot_tx,
                 held_keys_tx,
@@ -58,9 +62,16 @@ pub async fn take_runtime_channels() -> (
     watch::Sender<HashSet<Keycode>>,
     AudioSnapshot,
 ) {
-    let sys = AUDIO.get_or_init(|| async { unreachable!("call get_handle() first") }).await;
+    let sys = AUDIO
+        .get_or_init(|| async { unreachable!("call get_handle() first") })
+        .await;
     let mut guard = sys.cmd_rx.lock().await;
     let rx = guard.take().expect("audio runtime already taken");
     let initial = sys.snapshot_tx.borrow().clone();
-    (rx, sys.snapshot_tx.clone(), sys.held_keys_tx.clone(), initial)
+    (
+        rx,
+        sys.snapshot_tx.clone(),
+        sys.held_keys_tx.clone(),
+        initial,
+    )
 }
