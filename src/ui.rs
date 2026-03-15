@@ -6,7 +6,7 @@ use std::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use crossterm::{
@@ -19,7 +19,6 @@ use crossterm::{
 };
 
 use device_query::Keycode;
-
 use ratatui::{
     Terminal,
     backend::CrosstermBackend,
@@ -29,7 +28,6 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
-
 use tokio::sync::{mpsc, watch};
 use tokio::time::sleep;
 
@@ -44,17 +42,13 @@ mod kdr {
     use ratatui::style::Color;
 
     pub const BG0: Color = Color::Rgb(24, 22, 22);
-    pub const BG1: Color = Color::Rgb(40, 39, 39);
     pub const BORDER: Color = Color::Rgb(98, 94, 90);
 
     pub const FG: Color = Color::Rgb(197, 201, 197);
     pub const MUTED: Color = Color::Rgb(158, 155, 147);
 
-    pub const BLUE: Color = Color::Rgb(139, 164, 176);
-    pub const GREEN: Color = Color::Rgb(138, 154, 123);
     pub const ORANGE: Color = Color::Rgb(182, 146, 123);
     pub const YELLOW: Color = Color::Rgb(196, 178, 138);
-    pub const RED: Color = Color::Rgb(196, 116, 110);
 }
 
 struct TuiGuard;
@@ -78,10 +72,10 @@ enum FocusPane {
 impl FocusPane {
     fn next(self) -> Self {
         match self {
-            FocusPane::Waveforms => FocusPane::Adsr,
-            FocusPane::Adsr => FocusPane::Mod,
-            FocusPane::Mod => FocusPane::Bottom,
-            FocusPane::Bottom => FocusPane::Waveforms,
+            Self::Waveforms => Self::Adsr,
+            Self::Adsr => Self::Mod,
+            Self::Mod => Self::Bottom,
+            Self::Bottom => Self::Waveforms,
         }
     }
 }
@@ -95,8 +89,8 @@ enum ModTab {
 impl ModTab {
     fn next(self) -> Self {
         match self {
-            ModTab::Lfo => ModTab::LowPass,
-            ModTab::LowPass => ModTab::Lfo,
+            Self::Lfo => Self::LowPass,
+            Self::LowPass => Self::Lfo,
         }
     }
 }
@@ -110,21 +104,14 @@ enum AdsrParam {
 }
 
 impl AdsrParam {
-    fn all() -> [AdsrParam; 4] {
-        [
-            AdsrParam::Attack,
-            AdsrParam::Decay,
-            AdsrParam::Sustain,
-            AdsrParam::Release,
-        ]
-    }
+    const ALL: [Self; 4] = [Self::Attack, Self::Decay, Self::Sustain, Self::Release];
 
     fn label_and_hint(self) -> (&'static str, &'static str) {
         match self {
-            AdsrParam::Attack => ("Attack", "(s)"),
-            AdsrParam::Decay => ("Decay", "(s)"),
-            AdsrParam::Sustain => ("Sustain", "(0..1)"),
-            AdsrParam::Release => ("Release", "(s)"),
+            Self::Attack => ("Attack", "(s)"),
+            Self::Decay => ("Decay", "(s)"),
+            Self::Sustain => ("Sustain", "(0..1)"),
+            Self::Release => ("Release", "(s)"),
         }
     }
 }
@@ -137,15 +124,13 @@ enum LfoParam {
 }
 
 impl LfoParam {
-    fn all() -> [LfoParam; 3] {
-        [LfoParam::Kind, LfoParam::RateHz, LfoParam::Depth]
-    }
+    const ALL: [Self; 3] = [Self::Kind, Self::RateHz, Self::Depth];
 
     fn label_and_hint(self) -> (&'static str, &'static str) {
         match self {
-            LfoParam::Kind => ("Wave", ""),
-            LfoParam::RateHz => ("Rate", "(Hz)"),
-            LfoParam::Depth => ("Depth", "(0..1)"),
+            Self::Kind => ("Wave", ""),
+            Self::RateHz => ("Rate", "(Hz)"),
+            Self::Depth => ("Depth", "(0..1)"),
         }
     }
 }
@@ -156,13 +141,11 @@ enum LowPassParam {
 }
 
 impl LowPassParam {
-    fn all() -> [LowPassParam; 1] {
-        [LowPassParam::CutoffHz]
-    }
+    const ALL: [Self; 1] = [Self::CutoffHz];
 
     fn label_and_hint(self) -> (&'static str, &'static str) {
         match self {
-            LowPassParam::CutoffHz => ("Cutoff", "(Hz)"),
+            Self::CutoffHz => ("Cutoff", "(Hz)"),
         }
     }
 }
@@ -170,7 +153,7 @@ impl LowPassParam {
 struct UiState {
     focus: FocusPane,
 
-    waveforms: Vec<BasicKind>,
+    waveforms: [BasicKind; 5],
     waveform_idx: usize,
 
     adsr_param_idx: usize,
@@ -193,19 +176,9 @@ struct UiState {
 
 impl UiState {
     fn new(initial_adsr: Adsr) -> Self {
-        let initial_lfo = LfoAmpParams {
-            kind: BasicKind::Sine,
-            rate_hz: 5.0,
-            depth: 0.0,
-            base_gain: 1.0,
-        };
-        let initial_lowpass = LowPassParams {
-            cutoff_hz: 20_000.0,
-        };
-
         Self {
             focus: FocusPane::Waveforms,
-            waveforms: vec![
+            waveforms: [
                 BasicKind::Sine,
                 BasicKind::Saw,
                 BasicKind::Square,
@@ -219,10 +192,17 @@ impl UiState {
 
             mod_tab: ModTab::Lfo,
             lfo_param_idx: 0,
-            lfo: initial_lfo,
+            lfo: LfoAmpParams {
+                kind: BasicKind::Sine,
+                rate_hz: 5.0,
+                depth: 0.0,
+                base_gain: 1.0,
+            },
 
             lowpass_param_idx: 0,
-            lowpass: initial_lowpass,
+            lowpass: LowPassParams {
+                cutoff_hz: 20_000.0,
+            },
 
             patch_name: "Sine".to_string(),
             muted: false,
@@ -232,27 +212,31 @@ impl UiState {
         }
     }
 
+    #[inline]
     fn selected_waveform(&self) -> BasicKind {
         self.waveforms[self.waveform_idx]
     }
 
+    #[inline]
     fn selected_adsr_param(&self) -> AdsrParam {
-        AdsrParam::all()[self.adsr_param_idx]
+        AdsrParam::ALL[self.adsr_param_idx]
     }
 
+    #[inline]
     fn selected_lfo_param(&self) -> LfoParam {
-        LfoParam::all()[self.lfo_param_idx]
+        LfoParam::ALL[self.lfo_param_idx]
     }
 
-    fn selected_lowpass_param(&self) -> LowPassParam {
-        LowPassParam::all()[self.lowpass_param_idx]
-    }
+    // #[inline]
+    // fn selected_lowpass_param(&self) -> LowPassParam {
+    //     LowPassParam::ALL[self.lowpass_param_idx]
+    // }
 
     fn sync_waveform_idx_from_patch_name(&mut self) {
         if let Some(i) = self
             .waveforms
             .iter()
-            .position(|k| k.name() == self.patch_name.as_str())
+            .position(|kind| kind.name() == self.patch_name)
         {
             self.waveform_idx = i;
         }
@@ -268,7 +252,6 @@ pub async fn run_ui(
 
     enable_raw_mode()?;
     execute!(stdout, EnterAlternateScreen, EnableFocusChange)?;
-
     let _guard = TuiGuard;
 
     let backend = CrosstermBackend::new(stdout);
@@ -283,34 +266,36 @@ pub async fn run_ui(
 
     std::thread::spawn(move || {
         while !stop_bg.load(Ordering::Relaxed) {
-            if event::poll(Duration::from_millis(50)).ok() == Some(true) {
-                match event::read() {
-                    Ok(Event::Key(k)) => {
-                        if k.kind == KeyEventKind::Press || k.kind == KeyEventKind::Release {
-                            let _ = key_tx.send(k);
-                        }
-                    }
-                    Ok(Event::FocusLost) => {
-                        focused_bg.store(false, Ordering::Relaxed);
-                    }
-                    Ok(Event::FocusGained) => {
-                        focused_bg.store(true, Ordering::Relaxed);
-                    }
-                    _ => {}
+            if event::poll(Duration::from_millis(50)).ok() != Some(true) {
+                continue;
+            }
+
+            match event::read() {
+                Ok(Event::Key(k))
+                    if matches!(k.kind, KeyEventKind::Press | KeyEventKind::Release) =>
+                {
+                    let _ = key_tx.send(k);
                 }
+                Ok(Event::FocusLost) => {
+                    focused_bg.store(false, Ordering::Relaxed);
+                }
+                Ok(Event::FocusGained) => {
+                    focused_bg.store(true, Ordering::Relaxed);
+                }
+                _ => {}
             }
         }
     });
 
-    let ui_start = std::time::Instant::now();
-    let mut show_intro = true;
-
     let mut snap_rx = handle.subscribe();
-    let mut held_keys_rx = handle.held_keys_rx.clone();
+    let mut held_keys_rx = handle.subscribe_held_keys();
     let mut ui = UiState::new(Adsr::new(0.01, 0.10, 0.70, 0.25));
 
+    let intro_start = Instant::now();
+    let mut show_intro = true;
+
     loop {
-        if show_intro && ui_start.elapsed() >= Duration::from_secs(1) {
+        if show_intro && intro_start.elapsed() >= Duration::from_secs(1) {
             show_intro = false;
         }
 
@@ -339,12 +324,7 @@ pub async fn run_ui(
             k = key_rx.recv() => {
                 let Some(k) = k else { break; };
 
-                if k.modifiers.contains(KeyModifiers::CONTROL) && matches!(k.code, KeyCode::Char('c')) {
-                    let _ = shutdown_tx.send(true);
-                    break;
-                }
-
-                if matches!(k.code, KeyCode::Char('q')) {
+                if should_quit(k) {
                     let _ = shutdown_tx.send(true);
                     break;
                 }
@@ -359,130 +339,10 @@ pub async fn run_ui(
                 }
 
                 match ui.focus {
-                    FocusPane::Waveforms => {
-                        let mut changed = false;
-
-                        match k.code {
-                            KeyCode::Up => {
-                                if ui.waveform_idx > 0 {
-                                    ui.waveform_idx -= 1;
-                                    changed = true;
-                                }
-                            }
-                            KeyCode::Down => {
-                                if ui.waveform_idx + 1 < ui.waveforms.len() {
-                                    ui.waveform_idx += 1;
-                                    changed = true;
-                                }
-                            }
-                            _ => {}
-                        }
-
-                        if changed {
-                            let kind = ui.selected_waveform();
-                            handle.set_generator_kind(kind);
-                        }
-                    }
-
-                    FocusPane::Adsr => {
-                        match k.code {
-                            KeyCode::Up => {
-                                if ui.adsr_param_idx > 0 {
-                                    ui.adsr_param_idx -= 1;
-                                }
-                            }
-                            KeyCode::Down => {
-                                if ui.adsr_param_idx + 1 < 4 {
-                                    ui.adsr_param_idx += 1;
-                                }
-                            }
-                            KeyCode::Left => {
-                                tweak_adsr(&mut ui, -1);
-                                handle.set_adsr(ui.adsr);
-                            }
-                            KeyCode::Right => {
-                                tweak_adsr(&mut ui, 1);
-                                handle.set_adsr(ui.adsr);
-                            }
-                            _ => {}
-                        }
-                    }
-
-                    FocusPane::Mod => {
-                        match k.code {
-                            KeyCode::Char(' ') => {
-                                ui.mod_tab = ui.mod_tab.next();
-                            }
-
-                            KeyCode::Up => match ui.mod_tab {
-                                ModTab::Lfo => {
-                                    if ui.lfo_param_idx > 0 {
-                                        ui.lfo_param_idx -= 1;
-                                    }
-                                }
-                                ModTab::LowPass => {
-                                    if ui.lowpass_param_idx > 0 {
-                                        ui.lowpass_param_idx -= 1;
-                                    }
-                                }
-                            },
-
-                            KeyCode::Down => match ui.mod_tab {
-                                ModTab::Lfo => {
-                                    if ui.lfo_param_idx + 1 < 3 {
-                                        ui.lfo_param_idx += 1;
-                                    }
-                                }
-                                ModTab::LowPass => {
-                                    if ui.lowpass_param_idx + 1 < 1 {
-                                        ui.lowpass_param_idx += 1;
-                                    }
-                                }
-                            },
-
-                            KeyCode::Left => match ui.mod_tab {
-                                ModTab::Lfo => {
-                                    tweak_lfo(&mut ui, -1);
-                                    handle.set_lfo(ui.lfo);
-                                }
-                                ModTab::LowPass => {
-                                    tweak_lowpass(&mut ui, -1);
-                                    handle.set_lowpass(ui.lowpass);
-                                }
-                            },
-
-                            KeyCode::Right => match ui.mod_tab {
-                                ModTab::Lfo => {
-                                    tweak_lfo(&mut ui, 1);
-                                    handle.set_lfo(ui.lfo);
-                                }
-                                ModTab::LowPass => {
-                                    tweak_lowpass(&mut ui, 1);
-                                    handle.set_lowpass(ui.lowpass);
-                                }
-                            },
-
-                            _ => {}
-                        }
-                    }
-
-                    FocusPane::Bottom => {
-                        match k.code {
-                            KeyCode::Right => {
-                                if ui.octave_offset < 4 {
-                                    ui.octave_offset += 1;
-                                    handle.set_octave(ui.octave_offset);
-                                }
-                            }
-                            KeyCode::Left => {
-                                if ui.octave_offset > -4 {
-                                    ui.octave_offset -= 1;
-                                    handle.set_octave(ui.octave_offset);
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
+                    FocusPane::Waveforms => handle_waveforms(&mut ui, &handle, k),
+                    FocusPane::Adsr => handle_adsr(&mut ui, &handle, k),
+                    FocusPane::Mod => handle_mod(&mut ui, &handle, k),
+                    FocusPane::Bottom => handle_bottom(&mut ui, &handle, k),
                 }
             }
 
@@ -495,47 +355,148 @@ pub async fn run_ui(
     Ok(())
 }
 
+fn should_quit(k: KeyEvent) -> bool {
+    (k.modifiers.contains(KeyModifiers::CONTROL) && matches!(k.code, KeyCode::Char('c')))
+        || matches!(k.code, KeyCode::Char('q'))
+}
+
+fn handle_waveforms(ui: &mut UiState, handle: &AudioHandle, k: KeyEvent) {
+    let prev = ui.waveform_idx;
+
+    match k.code {
+        KeyCode::Up if ui.waveform_idx > 0 => ui.waveform_idx -= 1,
+        KeyCode::Down if ui.waveform_idx + 1 < ui.waveforms.len() => ui.waveform_idx += 1,
+        _ => {}
+    }
+
+    if ui.waveform_idx != prev {
+        handle.set_generator_kind(ui.selected_waveform());
+    }
+}
+
+fn handle_adsr(ui: &mut UiState, handle: &AudioHandle, k: KeyEvent) {
+    match k.code {
+        KeyCode::Up if ui.adsr_param_idx > 0 => ui.adsr_param_idx -= 1,
+        KeyCode::Down if ui.adsr_param_idx + 1 < AdsrParam::ALL.len() => ui.adsr_param_idx += 1,
+        KeyCode::Left => {
+            tweak_adsr(ui, -1);
+            handle.set_adsr(ui.adsr);
+        }
+        KeyCode::Right => {
+            tweak_adsr(ui, 1);
+            handle.set_adsr(ui.adsr);
+        }
+        _ => {}
+    }
+}
+
+fn handle_mod(ui: &mut UiState, handle: &AudioHandle, k: KeyEvent) {
+    match k.code {
+        KeyCode::Char(' ') => ui.mod_tab = ui.mod_tab.next(),
+
+        KeyCode::Up => match ui.mod_tab {
+            ModTab::Lfo if ui.lfo_param_idx > 0 => ui.lfo_param_idx -= 1,
+            ModTab::LowPass if ui.lowpass_param_idx > 0 => ui.lowpass_param_idx -= 1,
+            _ => {}
+        },
+
+        KeyCode::Down => match ui.mod_tab {
+            ModTab::Lfo if ui.lfo_param_idx + 1 < LfoParam::ALL.len() => ui.lfo_param_idx += 1,
+            ModTab::LowPass if ui.lowpass_param_idx + 1 < LowPassParam::ALL.len() => {
+                ui.lowpass_param_idx += 1
+            }
+            _ => {}
+        },
+
+        KeyCode::Left => match ui.mod_tab {
+            ModTab::Lfo => {
+                tweak_lfo(ui, -1);
+                handle.set_lfo(ui.lfo);
+            }
+            ModTab::LowPass => {
+                tweak_lowpass(ui, -1);
+                handle.set_lowpass(ui.lowpass);
+            }
+        },
+
+        KeyCode::Right => match ui.mod_tab {
+            ModTab::Lfo => {
+                tweak_lfo(ui, 1);
+                handle.set_lfo(ui.lfo);
+            }
+            ModTab::LowPass => {
+                tweak_lowpass(ui, 1);
+                handle.set_lowpass(ui.lowpass);
+            }
+        },
+
+        _ => {}
+    }
+}
+
+fn handle_bottom(ui: &mut UiState, handle: &AudioHandle, k: KeyEvent) {
+    match k.code {
+        KeyCode::Right if ui.octave_offset < 4 => {
+            ui.octave_offset += 1;
+            handle.set_octave(ui.octave_offset);
+        }
+        KeyCode::Left if ui.octave_offset > -4 => {
+            ui.octave_offset -= 1;
+            handle.set_octave(ui.octave_offset);
+        }
+        _ => {}
+    }
+}
+
+fn tweak_adsr(ui: &mut UiState, dir: i32) {
+    let step = match ui.selected_adsr_param() {
+        AdsrParam::Sustain => 0.01,
+        _ => 0.01,
+    };
+
+    let delta = if dir < 0 { -step } else { step };
+
+    match ui.selected_adsr_param() {
+        AdsrParam::Attack => ui.adsr.attack_s = (ui.adsr.attack_s + delta).clamp(0.0, 10.0),
+        AdsrParam::Decay => ui.adsr.decay_s = (ui.adsr.decay_s + delta).clamp(0.0, 10.0),
+        AdsrParam::Sustain => ui.adsr.sustain = (ui.adsr.sustain + delta).clamp(0.0, 1.0),
+        AdsrParam::Release => ui.adsr.release_s = (ui.adsr.release_s + delta).clamp(0.0, 10.0),
+    }
+}
+
 fn tweak_lfo(ui: &mut UiState, dir: i32) {
-    let d = if dir < 0 { -1 } else { 1 };
+    let dir = if dir < 0 { -1 } else { 1 };
 
     match ui.selected_lfo_param() {
-        LfoParam::Kind => {
-            ui.lfo.kind = next_basic_kind(ui.lfo.kind, d);
-        }
+        LfoParam::Kind => ui.lfo.kind = next_basic_kind(ui.lfo.kind, dir),
         LfoParam::RateHz => {
-            let step = 0.25;
-            ui.lfo.rate_hz = (ui.lfo.rate_hz + (d as f32) * step).clamp(0.05, 40.0);
+            ui.lfo.rate_hz = (ui.lfo.rate_hz + dir as f32 * 0.25).clamp(0.05, 40.0);
         }
         LfoParam::Depth => {
-            let step = 0.02;
-            ui.lfo.depth = (ui.lfo.depth + (d as f32) * step).clamp(0.0, 1.0);
+            ui.lfo.depth = (ui.lfo.depth + dir as f32 * 0.02).clamp(0.0, 1.0);
         }
     }
 }
 
 fn tweak_lowpass(ui: &mut UiState, dir: i32) {
-    let d = if dir < 0 { -1.0 } else { 1.0 };
+    let dir = if dir < 0 { -1.0 } else { 1.0 };
+    let cutoff = ui.lowpass.cutoff_hz;
 
-    match ui.selected_lowpass_param() {
-        LowPassParam::CutoffHz => {
-            let cutoff = ui.lowpass.cutoff_hz;
-            let step = if cutoff < 100.0 {
-                5.0
-            } else if cutoff < 1000.0 {
-                25.0
-            } else if cutoff < 5000.0 {
-                100.0
-            } else {
-                250.0
-            };
+    let step = if cutoff < 100.0 {
+        5.0
+    } else if cutoff < 1000.0 {
+        25.0
+    } else if cutoff < 5000.0 {
+        100.0
+    } else {
+        250.0
+    };
 
-            ui.lowpass.cutoff_hz = (cutoff + d * step).clamp(20.0, 20_000.0);
-        }
-    }
+    ui.lowpass.cutoff_hz = (cutoff + dir * step).clamp(20.0, 20_000.0);
 }
 
-fn next_basic_kind(k: BasicKind, dir: i32) -> BasicKind {
-    let all = [
+fn next_basic_kind(kind: BasicKind, dir: i32) -> BasicKind {
+    const ALL: [BasicKind; 5] = [
         BasicKind::Sine,
         BasicKind::Saw,
         BasicKind::Square,
@@ -543,33 +504,8 @@ fn next_basic_kind(k: BasicKind, dir: i32) -> BasicKind {
         BasicKind::Noise,
     ];
 
-    let idx = all.iter().position(|x| *x == k).unwrap_or(0) as i32;
-    let n = all.len() as i32;
-    let next = (idx + dir).rem_euclid(n) as usize;
-    all[next]
-}
-
-fn tweak_adsr(ui: &mut UiState, dir: i32) {
-    let step = ui_selected_small_step(ui.selected_adsr_param());
-    let d = if dir < 0 { -step } else { step };
-
-    match ui.selected_adsr_param() {
-        AdsrParam::Attack => ui.adsr.attack_s = (ui.adsr.attack_s + d).max(0.0),
-        AdsrParam::Decay => ui.adsr.decay_s = (ui.adsr.decay_s + d).max(0.0),
-        AdsrParam::Sustain => ui.adsr.sustain = (ui.adsr.sustain + d).clamp(0.0, 1.0),
-        AdsrParam::Release => ui.adsr.release_s = (ui.adsr.release_s + d).max(0.0),
-    }
-
-    ui.adsr.attack_s = ui.adsr.attack_s.min(10.0);
-    ui.adsr.decay_s = ui.adsr.decay_s.min(10.0);
-    ui.adsr.release_s = ui.adsr.release_s.min(10.0);
-}
-
-fn ui_selected_small_step(p: AdsrParam) -> f32 {
-    match p {
-        AdsrParam::Sustain => 0.01,
-        _ => 0.01,
-    }
+    let idx = ALL.iter().position(|x| *x == kind).unwrap_or(0) as i32;
+    ALL[(idx + dir).rem_euclid(ALL.len() as i32) as usize]
 }
 
 fn draw_intro(f: &mut ratatui::Frame) {
@@ -625,20 +561,11 @@ fn draw_intro(f: &mut ratatui::Frame) {
 
     f.render_widget(Clear, area);
 
-    let outer = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(kdr::BORDER))
-        .style(Style::default().bg(kdr::BG0).fg(kdr::FG));
+    let outer = outer_block();
     let inner = outer.inner(area);
     f.render_widget(outer, area);
 
     let total_h = art.len() as u16;
-    let main_lines: Vec<Line> = lines.into_iter().take((total_h - 1) as usize).collect();
-    let synthesis_line = Line::from(Span::styled(
-        "s y n t h e s i s",
-        Style::default().fg(kdr::ORANGE).bold(),
-    ));
-
     let y = inner.y + (inner.height.saturating_sub(total_h)) / 2;
 
     let main_area = Rect {
@@ -647,11 +574,17 @@ fn draw_intro(f: &mut ratatui::Frame) {
         width: inner.width,
         height: (total_h - 1).min(inner.height),
     };
+
     f.render_widget(
-        Paragraph::new(main_lines)
-            .alignment(Alignment::Center)
-            .wrap(Wrap { trim: false })
-            .style(Style::default().fg(kdr::FG).bg(kdr::BG0)),
+        Paragraph::new(
+            lines
+                .into_iter()
+                .take((total_h - 1) as usize)
+                .collect::<Vec<_>>(),
+        )
+        .alignment(Alignment::Center)
+        .wrap(Wrap { trim: false })
+        .style(Style::default().fg(kdr::FG).bg(kdr::BG0)),
         main_area,
     );
 
@@ -663,10 +596,14 @@ fn draw_intro(f: &mut ratatui::Frame) {
             width: inner.width,
             height: 1,
         };
+
         f.render_widget(
-            Paragraph::new(vec![synthesis_line])
-                .alignment(Alignment::Center)
-                .style(Style::default().bg(kdr::BG0)),
+            Paragraph::new(vec![Line::from(Span::styled(
+                "s y n t h e s i s",
+                Style::default().fg(kdr::ORANGE).bold(),
+            ))])
+            .alignment(Alignment::Center)
+            .style(Style::default().bg(kdr::BG0)),
             synth_area,
         );
     }
@@ -685,11 +622,7 @@ fn draw_ui(f: &mut ratatui::Frame, ui: &UiState) {
 
     f.render_widget(Clear, area);
 
-    let outer = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(kdr::BORDER))
-        .style(Style::default().bg(kdr::BG0).fg(kdr::FG));
-
+    let outer = outer_block();
     let inner = outer.inner(area);
     f.render_widget(outer, area);
 
@@ -733,11 +666,7 @@ fn draw_ui(f: &mut ratatui::Frame, ui: &UiState) {
 fn draw_too_small(f: &mut ratatui::Frame, area: Rect, min_w: u16, min_h: u16) {
     f.render_widget(Clear, area);
 
-    let outer = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(kdr::BORDER))
-        .style(Style::default().bg(kdr::BG0).fg(kdr::FG));
-
+    let outer = outer_block();
     let inner = outer.inner(area);
     f.render_widget(outer, area);
 
@@ -757,18 +686,93 @@ fn draw_too_small(f: &mut ratatui::Frame, area: Rect, min_w: u16, min_h: u16) {
 
     let h = msg.len() as u16;
     let y = inner.y + inner.height.saturating_sub(h) / 2;
-    let msg_area = Rect {
-        x: inner.x,
-        y,
-        width: inner.width,
-        height: h.min(inner.height),
-    };
 
     f.render_widget(
         Paragraph::new(msg)
             .alignment(Alignment::Center)
             .style(Style::default().bg(kdr::BG0)),
-        msg_area,
+        Rect {
+            x: inner.x,
+            y,
+            width: inner.width,
+            height: h.min(inner.height),
+        },
+    );
+}
+
+fn draw_logo(f: &mut ratatui::Frame, area: Rect) {
+    let lines = vec![
+        Line::from(Span::styled("無", Style::default().fg(kdr::FG)).bold()),
+        Line::from(Span::styled("限", Style::default().fg(kdr::FG)).bold()),
+    ];
+
+    let total_h = lines.len() as u16;
+    let y = area.y + area.height.saturating_sub(total_h) / 2;
+
+    f.render_widget(
+        Paragraph::new(lines)
+            .alignment(Alignment::Center)
+            .wrap(Wrap { trim: true })
+            .style(Style::default().bg(kdr::BG0)),
+        Rect {
+            x: area.x,
+            y,
+            width: area.width,
+            height: total_h.min(area.height),
+        },
+    );
+}
+
+fn draw_waveforms(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
+    let focused = ui.focus == FocusPane::Waveforms;
+    let block = panel_block("waveforms", focused);
+
+    let mut lines = vec![Line::from("")];
+    for (i, kind) in ui.waveforms.iter().copied().enumerate() {
+        lines.push(simple_select_line(i == ui.waveform_idx, kind.name()));
+    }
+
+    f.render_widget(
+        Paragraph::new(lines)
+            .block(block)
+            .wrap(Wrap { trim: false })
+            .alignment(Alignment::Left)
+            .style(panel_style(focused)),
+        area,
+    );
+}
+
+fn draw_adsr(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
+    let focused = ui.focus == FocusPane::Adsr;
+    let block = panel_block("adsr", focused);
+
+    let rows = AdsrParam::ALL.iter().enumerate().map(|(i, p)| {
+        let value = match p {
+            AdsrParam::Attack => format!("{:.3}", ui.adsr.attack_s),
+            AdsrParam::Decay => format!("{:.3}", ui.adsr.decay_s),
+            AdsrParam::Sustain => format!("{:.2}", ui.adsr.sustain),
+            AdsrParam::Release => format!("{:.3}", ui.adsr.release_s),
+        };
+        let (label, hint) = p.label_and_hint();
+        kv_line(
+            area.width.saturating_sub(2) as usize,
+            i == ui.adsr_param_idx,
+            label,
+            hint,
+            &value,
+        )
+    });
+
+    let mut lines = vec![Line::from("")];
+    lines.extend(rows);
+
+    f.render_widget(
+        Paragraph::new(lines)
+            .block(block)
+            .wrap(Wrap { trim: false })
+            .alignment(Alignment::Left)
+            .style(panel_style(focused)),
+        area,
     );
 }
 
@@ -781,19 +785,19 @@ fn draw_mod(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
         Style::default().fg(kdr::BORDER)
     };
 
-    let active_style = if focused {
+    let active = if focused {
         Style::default().fg(kdr::ORANGE).bold()
     } else {
         Style::default().fg(kdr::FG).bold()
     };
 
-    let inactive_style = if focused {
+    let inactive = if focused {
         Style::default().fg(kdr::FG)
     } else {
         Style::default().fg(kdr::MUTED)
     };
 
-    let divider_style = if focused {
+    let divider = if focused {
         Style::default().fg(kdr::FG).bold()
     } else {
         Style::default().fg(kdr::MUTED).bold()
@@ -802,16 +806,16 @@ fn draw_mod(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
     let title = match ui.mod_tab {
         ModTab::Lfo => Line::from(vec![
             Span::raw(" "),
-            Span::styled("lfo", active_style),
-            Span::styled(" ─ ", divider_style),
-            Span::styled("lowpass", inactive_style),
+            Span::styled("lfo", active),
+            Span::styled(" ─ ", divider),
+            Span::styled("lowpass", inactive),
             Span::raw(" "),
         ]),
         ModTab::LowPass => Line::from(vec![
             Span::raw(" "),
-            Span::styled("lfo", inactive_style),
-            Span::styled(" ─ ", divider_style),
-            Span::styled("lowpass", active_style),
+            Span::styled("lfo", inactive),
+            Span::styled(" ─ ", divider),
+            Span::styled("lowpass", active),
             Span::raw(" "),
         ]),
     };
@@ -829,405 +833,53 @@ fn draw_mod(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
         return;
     }
 
+    let mut lines = vec![Line::from("")];
+
     match ui.mod_tab {
-        ModTab::Lfo => draw_mod_lfo_content(f, inner, ui, focused),
-        ModTab::LowPass => draw_mod_lowpass_content(f, inner, ui, focused),
-    }
-}
-
-fn draw_mod_lfo_content(f: &mut ratatui::Frame, area: Rect, ui: &UiState, focused: bool) {
-    let content_style = if focused {
-        Style::default().fg(kdr::FG).bg(kdr::BG0)
-    } else {
-        Style::default().fg(kdr::MUTED).bg(kdr::BG0)
-    };
-
-    let width = area.width as usize;
-    let mut lines: Vec<Line> = vec![Line::from("")];
-
-    if width == 0 {
-        f.render_widget(
-            Paragraph::new(lines)
-                .wrap(Wrap { trim: false })
-                .alignment(Alignment::Left)
-                .style(content_style),
-            area,
-        );
-        return;
-    }
-
-    let right_padding = 1usize;
-
-    for (i, p) in LfoParam::all().iter().copied().enumerate() {
-        let is_sel = i == ui.lfo_param_idx;
-
-        let val = match p {
-            LfoParam::Kind => ui.lfo.kind.name().to_string(),
-            LfoParam::RateHz => format!("{:.2}", ui.lfo.rate_hz),
-            LfoParam::Depth => format!("{:.2}", ui.lfo.depth),
-        };
-
-        let (label, hint) = p.label_and_hint();
-        let prefix = if is_sel { "› " } else { "  " };
-
-        let prefix_style = if is_sel {
-            Style::default().fg(kdr::ORANGE).bold()
-        } else {
-            Style::default().fg(kdr::MUTED)
-        };
-
-        let label_style = if is_sel {
-            Style::default().fg(kdr::FG).bold()
-        } else {
-            Style::default().fg(kdr::FG)
-        };
-
-        let hint_style = Style::default().fg(kdr::MUTED);
-
-        let value_style = if is_sel {
-            Style::default().fg(kdr::FG).bold()
-        } else {
-            Style::default().fg(kdr::FG)
-        };
-
-        let left_label = format!("{label} ");
-        let left_len = prefix.chars().count() + left_label.chars().count() + hint.chars().count();
-        let val_len = val.chars().count();
-        let min_gap = 2usize;
-
-        let usable_width = width.saturating_sub(right_padding);
-        let pad_len = usable_width.saturating_sub(left_len + min_gap + val_len);
-        let pad = " ".repeat(pad_len + min_gap);
-
-        lines.push(Line::from(vec![
-            Span::styled(prefix, prefix_style),
-            Span::styled(left_label, label_style),
-            Span::styled(hint, hint_style),
-            Span::raw(pad),
-            Span::styled(val, value_style),
-            Span::raw(" ".repeat(right_padding)),
-        ]));
-    }
-
-    f.render_widget(
-        Paragraph::new(lines)
-            .wrap(Wrap { trim: false })
-            .alignment(Alignment::Left)
-            .style(content_style),
-        area,
-    );
-}
-
-fn draw_mod_lowpass_content(f: &mut ratatui::Frame, area: Rect, ui: &UiState, focused: bool) {
-    let content_style = if focused {
-        Style::default().fg(kdr::FG).bg(kdr::BG0)
-    } else {
-        Style::default().fg(kdr::MUTED).bg(kdr::BG0)
-    };
-
-    let width = area.width as usize;
-    let mut lines: Vec<Line> = vec![Line::from("")];
-
-    if width == 0 {
-        f.render_widget(
-            Paragraph::new(lines)
-                .wrap(Wrap { trim: false })
-                .alignment(Alignment::Left)
-                .style(content_style),
-            area,
-        );
-        return;
-    }
-
-    let right_padding = 1usize;
-
-    for (i, p) in LowPassParam::all().iter().copied().enumerate() {
-        let is_sel = i == ui.lowpass_param_idx;
-
-        let val = match p {
-            LowPassParam::CutoffHz => format!("{:.0}", ui.lowpass.cutoff_hz),
-        };
-
-        let (label, hint) = p.label_and_hint();
-        let prefix = if is_sel { "› " } else { "  " };
-
-        let prefix_style = if is_sel {
-            Style::default().fg(kdr::ORANGE).bold()
-        } else {
-            Style::default().fg(kdr::MUTED)
-        };
-
-        let label_style = if is_sel {
-            Style::default().fg(kdr::FG).bold()
-        } else {
-            Style::default().fg(kdr::FG)
-        };
-
-        let hint_style = Style::default().fg(kdr::MUTED);
-
-        let value_style = if is_sel {
-            Style::default().fg(kdr::FG).bold()
-        } else {
-            Style::default().fg(kdr::FG)
-        };
-
-        let left_label = format!("{label} ");
-        let left_len = prefix.chars().count() + left_label.chars().count() + hint.chars().count();
-        let val_len = val.chars().count();
-        let min_gap = 2usize;
-
-        let usable_width = width.saturating_sub(right_padding);
-        let pad_len = usable_width.saturating_sub(left_len + min_gap + val_len);
-        let pad = " ".repeat(pad_len + min_gap);
-
-        lines.push(Line::from(vec![
-            Span::styled(prefix, prefix_style),
-            Span::styled(left_label, label_style),
-            Span::styled(hint, hint_style),
-            Span::raw(pad),
-            Span::styled(val, value_style),
-            Span::raw(" ".repeat(right_padding)),
-        ]));
-    }
-
-    f.render_widget(
-        Paragraph::new(lines)
-            .wrap(Wrap { trim: false })
-            .alignment(Alignment::Left)
-            .style(content_style),
-        area,
-    );
-}
-
-fn draw_logo(f: &mut ratatui::Frame, area: Rect) {
-    let lines = vec![
-        Line::from(Span::styled("無", Style::default().fg(kdr::FG)).bold()),
-        Line::from(Span::styled("限", Style::default().fg(kdr::FG)).bold()),
-    ];
-
-    let total_h = lines.len() as u16;
-    let y = area.y + area.height.saturating_sub(total_h) / 2;
-
-    let centered = Rect {
-        x: area.x,
-        y,
-        width: area.width,
-        height: total_h.min(area.height),
-    };
-
-    let w = Paragraph::new(lines)
-        .alignment(Alignment::Center)
-        .wrap(Wrap { trim: true })
-        .style(Style::default().bg(kdr::BG0));
-
-    f.render_widget(w, centered);
-}
-
-fn tab_title(name: &'static str, focused: bool) -> Span<'static> {
-    let t = format!(" {name} ");
-    if focused {
-        Span::styled(t, Style::default().fg(kdr::ORANGE).bold())
-    } else {
-        Span::styled(t, Style::default().fg(kdr::MUTED))
-    }
-}
-
-fn draw_waveforms(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
-    let focused = ui.focus == FocusPane::Waveforms;
-
-    let border = if focused {
-        Style::default().fg(kdr::FG)
-    } else {
-        Style::default().fg(kdr::BORDER)
-    };
-
-    let content_style = if focused {
-        Style::default().fg(kdr::FG).bg(kdr::BG0)
-    } else {
-        Style::default().fg(kdr::MUTED).bg(kdr::BG0)
-    };
-
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title(tab_title("waveforms", focused))
-        .border_style(border)
-        .style(Style::default().bg(kdr::BG0));
-
-    let mut lines: Vec<Line> = Vec::new();
-    lines.push(Line::from(""));
-
-    for (i, k) in ui.waveforms.iter().copied().enumerate() {
-        let name = k.name();
-        let is_sel = i == ui.waveform_idx;
-
-        let line = if is_sel {
-            Line::from(vec![
-                Span::styled("› ", Style::default().fg(kdr::ORANGE).bold()),
-                Span::styled(name, Style::default().fg(kdr::FG).bold()),
-            ])
-        } else {
-            Line::from(vec![
-                Span::styled("  ", Style::default().fg(kdr::MUTED)),
-                Span::styled(name, Style::default().fg(kdr::FG)),
-            ])
-        };
-
-        lines.push(line);
-    }
-
-    let w = Paragraph::new(lines)
-        .block(block)
-        .wrap(Wrap { trim: false })
-        .alignment(Alignment::Left)
-        .style(content_style);
-
-    f.render_widget(w, area);
-}
-
-fn draw_adsr(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
-    let focused = ui.focus == FocusPane::Adsr;
-
-    let border = if focused {
-        Style::default().fg(kdr::FG)
-    } else {
-        Style::default().fg(kdr::BORDER)
-    };
-
-    let content_style = if focused {
-        Style::default().fg(kdr::FG).bg(kdr::BG0)
-    } else {
-        Style::default().fg(kdr::MUTED).bg(kdr::BG0)
-    };
-
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title(tab_title("adsr", focused))
-        .border_style(border)
-        .style(Style::default().bg(kdr::BG0));
-
-    let inner = block.inner(area);
-    let width = inner.width as usize;
-
-    let params = AdsrParam::all();
-    let mut lines: Vec<Line> = Vec::new();
-    lines.push(Line::from(""));
-
-    if width == 0 {
-        let w = Paragraph::new(lines)
-            .block(block)
-            .wrap(Wrap { trim: false })
-            .alignment(Alignment::Left)
-            .style(content_style);
-        f.render_widget(w, area);
-        return;
-    }
-
-    let right_padding = 1usize;
-
-    for (i, p) in params.iter().copied().enumerate() {
-        let is_sel = i == ui.adsr_param_idx;
-
-        let val = match p {
-            AdsrParam::Attack => format!("{:.3}", ui.adsr.attack_s),
-            AdsrParam::Decay => format!("{:.3}", ui.adsr.decay_s),
-            AdsrParam::Sustain => format!("{:.2}", ui.adsr.sustain),
-            AdsrParam::Release => format!("{:.3}", ui.adsr.release_s),
-        };
-
-        let (label, hint) = p.label_and_hint();
-        let prefix = if is_sel { "› " } else { "  " };
-
-        let prefix_style = if is_sel {
-            Style::default().fg(kdr::ORANGE).bold()
-        } else {
-            Style::default().fg(kdr::MUTED)
-        };
-
-        let label_style = if is_sel {
-            Style::default().fg(kdr::FG).bold()
-        } else {
-            Style::default().fg(kdr::FG)
-        };
-
-        let hint_style = Style::default().fg(kdr::MUTED);
-
-        let value_style = if is_sel {
-            Style::default().fg(kdr::FG).bold()
-        } else {
-            Style::default().fg(kdr::FG)
-        };
-
-        let left_label = format!("{label} ");
-        let left_len = prefix.chars().count() + left_label.chars().count() + hint.chars().count();
-
-        let val_len = val.chars().count();
-        let min_gap = 2usize;
-
-        let usable_width = width.saturating_sub(right_padding);
-        let pad_len = usable_width.saturating_sub(left_len + min_gap + val_len);
-        let pad = " ".repeat(pad_len + min_gap);
-
-        lines.push(Line::from(vec![
-            Span::styled(prefix, prefix_style),
-            Span::styled(left_label, label_style),
-            Span::styled(hint, hint_style),
-            Span::raw(pad),
-            Span::styled(val, value_style),
-            Span::raw(" ".repeat(right_padding)),
-        ]));
-    }
-
-    let w = Paragraph::new(lines)
-        .block(block)
-        .wrap(Wrap { trim: false })
-        .alignment(Alignment::Left)
-        .style(content_style);
-
-    f.render_widget(w, area);
-}
-
-fn draw_bottom(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
-    use ratatui::buffer::Buffer;
-
-    fn fill_rect(buf: &mut Buffer, bounds: Rect, x: u16, y: u16, w: u16, h: u16, st: Style) {
-        if w == 0 || h == 0 {
-            return;
+        ModTab::Lfo => {
+            for (i, p) in LfoParam::ALL.iter().enumerate() {
+                let value = match p {
+                    LfoParam::Kind => ui.lfo.kind.name().to_string(),
+                    LfoParam::RateHz => format!("{:.2}", ui.lfo.rate_hz),
+                    LfoParam::Depth => format!("{:.2}", ui.lfo.depth),
+                };
+                let (label, hint) = p.label_and_hint();
+                lines.push(kv_line(
+                    inner.width as usize,
+                    i == ui.lfo_param_idx,
+                    label,
+                    hint,
+                    &value,
+                ));
+            }
         }
-
-        let x2 = x.saturating_add(w);
-        let y2 = y.saturating_add(h);
-
-        let xmin = x.max(bounds.x);
-        let ymin = y.max(bounds.y);
-        let xmax = x2.min(bounds.x + bounds.width);
-        let ymax = y2.min(bounds.y + bounds.height);
-
-        for yy in ymin..ymax {
-            for xx in xmin..xmax {
-                buf[(xx, yy)].set_char(' ').set_style(st);
+        ModTab::LowPass => {
+            for (i, p) in LowPassParam::ALL.iter().enumerate() {
+                let value = match p {
+                    LowPassParam::CutoffHz => format!("{:.0}", ui.lowpass.cutoff_hz),
+                };
+                let (label, hint) = p.label_and_hint();
+                lines.push(kv_line(
+                    inner.width as usize,
+                    i == ui.lowpass_param_idx,
+                    label,
+                    hint,
+                    &value,
+                ));
             }
         }
     }
 
-    fn vline(buf: &mut Buffer, bounds: Rect, x: u16, y: u16, h: u16, ch: char, st: Style) {
-        if h == 0 {
-            return;
-        }
-        if x < bounds.x || x >= bounds.x + bounds.width {
-            return;
-        }
+    f.render_widget(
+        Paragraph::new(lines)
+            .wrap(Wrap { trim: false })
+            .alignment(Alignment::Left)
+            .style(panel_style(focused)),
+        inner,
+    );
+}
 
-        let y2 = y.saturating_add(h);
-        let ymin = y.max(bounds.y);
-        let ymax = y2.min(bounds.y + bounds.height);
-
-        for yy in ymin..ymax {
-            buf[(x, yy)].set_char(ch).set_style(st);
-        }
-    }
-
-    let focused = ui.focus == FocusPane::Bottom;
-
+fn draw_bottom(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
     struct WhiteKey {
         code: Keycode,
         label: &'static str,
@@ -1324,16 +976,17 @@ fn draw_bottom(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
         },
     ];
 
-    let is_pressed = |code: &Keycode| ui.held_keys.contains(code);
-
     let bounds = area;
     if bounds.width < 18 || bounds.height < 6 {
         return;
     }
 
-    let n_white = white_keys.len();
+    let focused = ui.focus == FocusPane::Bottom;
+    let is_pressed = |code: &Keycode| ui.held_keys.contains(code);
+
     let total_w = bounds.width as usize;
     let total_h = bounds.height as usize;
+    let n_white = white_keys.len();
 
     let white_w = (total_w / n_white).max(4);
     let used_w = white_w * n_white;
@@ -1343,9 +996,16 @@ fn draw_bottom(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
     let black_h = ((white_h * 60) / 100).max(2);
     let black_w = ((white_w * 55) / 100).max(2);
 
+    let bg = Style::default().bg(kdr::BG0);
+    let white_bg = if focused { kdr::FG } else { kdr::BORDER };
+    let white_fill = Style::default().bg(white_bg).fg(kdr::BG0);
+    let orange_fill = Style::default().bg(kdr::ORANGE).fg(kdr::BG0);
+    let sep_style = Style::default().fg(kdr::BG0).bg(white_bg);
+    let black_fill = Style::default().bg(kdr::BG0).fg(kdr::FG);
+    let black_pressed = Style::default().bg(kdr::ORANGE).fg(kdr::BG0);
+
     let buf = f.buffer_mut();
 
-    let bg = Style::default().bg(kdr::BG0);
     fill_rect(
         buf,
         bounds,
@@ -1356,39 +1016,7 @@ fn draw_bottom(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
         bg,
     );
 
-    let white_bg = if focused { kdr::FG } else { kdr::BORDER };
-    let white_fill = Style::default().bg(white_bg).fg(kdr::BG0);
-
-    let orange_fill = Style::default().bg(kdr::ORANGE).fg(kdr::BG0);
-
-    let sep_style = Style::default().fg(kdr::BG0).bg(white_bg);
-
-    let black_fill = Style::default().bg(kdr::BG0).fg(kdr::FG);
-    let black_pressed = Style::default().bg(kdr::ORANGE).fg(kdr::BG0);
-
     for (i, wk) in white_keys.iter().enumerate() {
-        let x = (x0 + i * white_w) as u16;
-        let y = bounds.y;
-        let w = white_w as u16;
-        let h = white_h as u16;
-
-        let st = if is_pressed(&wk.code) {
-            orange_fill
-        } else {
-            white_fill
-        };
-        fill_rect(buf, bounds, x, y, w, h, st);
-    }
-
-    for i in 0..(n_white - 1) {
-        let x = (x0 + (i + 1) * white_w - 1) as u16;
-        vline(buf, bounds, x, bounds.y, bounds.height, '│', sep_style);
-    }
-
-    for (i, wk) in white_keys.iter().enumerate() {
-        if !is_pressed(&wk.code) {
-            continue;
-        }
         let x = (x0 + i * white_w) as u16;
         fill_rect(
             buf,
@@ -1397,14 +1025,21 @@ fn draw_bottom(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
             bounds.y,
             white_w as u16,
             bounds.height,
-            orange_fill,
+            if is_pressed(&wk.code) {
+                orange_fill
+            } else {
+                white_fill
+            },
         );
     }
 
     for i in 0..(n_white - 1) {
-        let left_p = is_pressed(&white_keys[i].code);
-        let right_p = is_pressed(&white_keys[i + 1].code);
-        if left_p || right_p {
+        let x = (x0 + (i + 1) * white_w - 1) as u16;
+        vline(buf, bounds, x, bounds.y, bounds.height, '│', sep_style);
+    }
+
+    for i in 0..(n_white - 1) {
+        if is_pressed(&white_keys[i].code) || is_pressed(&white_keys[i + 1].code) {
             let x = (x0 + (i + 1) * white_w - 1) as u16;
             fill_rect(buf, bounds, x, bounds.y, 1, bounds.height, orange_fill);
         }
@@ -1413,8 +1048,7 @@ fn draw_bottom(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
     let label_y = bounds.y + bounds.height - 1;
     for (i, wk) in white_keys.iter().enumerate() {
         let x = (x0 + i * white_w) as u16;
-        let w = white_w as u16;
-        let lx = x + (w / 2);
+        let lx = x + white_w as u16 / 2;
 
         if lx >= bounds.x && lx < bounds.x + bounds.width {
             let pressed = is_pressed(&wk.code);
@@ -1431,8 +1065,6 @@ fn draw_bottom(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
     }
 
     for bk in &black_keys {
-        let pressed = is_pressed(&bk.code);
-
         let center_x = x0 + (bk.gap_after + 1) * white_w;
         let bx = center_x.saturating_sub(black_w / 2);
 
@@ -1440,6 +1072,7 @@ fn draw_bottom(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
         let y = bounds.y;
         let w = black_w as u16;
         let h = black_h as u16;
+        let pressed = is_pressed(&bk.code);
 
         fill_rect(
             buf,
@@ -1451,7 +1084,7 @@ fn draw_bottom(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
             if pressed { black_pressed } else { black_fill },
         );
 
-        let lx = x + (w / 2);
+        let lx = x + w / 2;
         let ly = y + h - 1;
         if lx >= bounds.x
             && lx < bounds.x + bounds.width
@@ -1481,39 +1114,40 @@ fn draw_help(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
         },
         FocusPane::Bottom => "Keyboard",
     };
+
     let key_style = Style::default().fg(kdr::ORANGE).bold();
-    let dim_style = Style::default().fg(kdr::MUTED);
+    let dim = Style::default().fg(kdr::MUTED);
     let strong = Style::default().fg(kdr::FG).bold();
 
     let l1 = Line::from(vec![
         Span::styled("Tab", key_style),
-        Span::styled(" focus  ", dim_style),
+        Span::styled(" focus  ", dim),
         Span::styled("Space", key_style),
-        Span::styled(" toggle mod  ", dim_style),
+        Span::styled(" toggle mod  ", dim),
         Span::styled("↑/↓", key_style),
-        Span::styled(" select  ", dim_style),
+        Span::styled(" select  ", dim),
         Span::styled("←/→", key_style),
-        Span::styled(" change  ", dim_style),
+        Span::styled(" change  ", dim),
         Span::styled("q", key_style),
-        Span::styled(" quit  ", dim_style),
+        Span::styled(" quit  ", dim),
         Span::styled("Ctrl+C", key_style),
-        Span::styled(" quit", dim_style),
+        Span::styled(" quit", dim),
     ]);
 
     let l3 = Line::from(vec![
-        Span::styled("Focus: ", dim_style),
+        Span::styled("Focus: ", dim),
         Span::styled(focus_name, strong),
-        Span::styled("  |  Wave: ", dim_style),
+        Span::styled("  |  Wave: ", dim),
         Span::styled(ui.patch_name.clone(), strong),
-        Span::styled("  |  LP ", dim_style),
+        Span::styled("  |  LP ", dim),
         Span::styled(format!("{:.0}Hz", ui.lowpass.cutoff_hz), strong),
-        Span::styled("  |  Vol ", dim_style),
+        Span::styled("  |  Vol ", dim),
         Span::styled(format!("{:.2}", ui.volume), strong),
         Span::styled(
             if ui.muted { " Muted" } else { "" },
             Style::default().fg(kdr::ORANGE).bold(),
         ),
-        Span::styled("  |  Oct ", dim_style),
+        Span::styled("  |  Oct ", dim),
         Span::styled(
             format!("{:+}", ui.octave_offset),
             if ui.octave_offset == 0 {
@@ -1524,10 +1158,151 @@ fn draw_help(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
         ),
     ]);
 
-    let w = Paragraph::new(vec![Line::from(""), l1, l3])
-        .alignment(Alignment::Center)
-        .wrap(Wrap { trim: true })
-        .style(Style::default().bg(kdr::BG0));
+    f.render_widget(
+        Paragraph::new(vec![Line::from(""), l1, l3])
+            .alignment(Alignment::Center)
+            .wrap(Wrap { trim: true })
+            .style(Style::default().bg(kdr::BG0)),
+        area,
+    );
+}
 
-    f.render_widget(w, area);
+fn outer_block() -> Block<'static> {
+    Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(kdr::BORDER))
+        .style(Style::default().bg(kdr::BG0).fg(kdr::FG))
+}
+
+fn panel_block(title: &'static str, focused: bool) -> Block<'static> {
+    Block::default()
+        .borders(Borders::ALL)
+        .title(tab_title(title, focused))
+        .border_style(if focused {
+            Style::default().fg(kdr::FG)
+        } else {
+            Style::default().fg(kdr::BORDER)
+        })
+        .style(Style::default().bg(kdr::BG0))
+}
+
+fn panel_style(focused: bool) -> Style {
+    if focused {
+        Style::default().fg(kdr::FG).bg(kdr::BG0)
+    } else {
+        Style::default().fg(kdr::MUTED).bg(kdr::BG0)
+    }
+}
+
+fn tab_title(name: &'static str, focused: bool) -> Span<'static> {
+    let t = format!(" {name} ");
+    if focused {
+        Span::styled(t, Style::default().fg(kdr::ORANGE).bold())
+    } else {
+        Span::styled(t, Style::default().fg(kdr::MUTED))
+    }
+}
+
+fn simple_select_line(selected: bool, text: &str) -> Line<'static> {
+    if selected {
+        Line::from(vec![
+            Span::styled("› ", Style::default().fg(kdr::ORANGE).bold()),
+            Span::styled(text.to_string(), Style::default().fg(kdr::FG).bold()),
+        ])
+    } else {
+        Line::from(vec![
+            Span::styled("  ", Style::default().fg(kdr::MUTED)),
+            Span::styled(text.to_string(), Style::default().fg(kdr::FG)),
+        ])
+    }
+}
+
+fn kv_line(width: usize, selected: bool, label: &str, hint: &str, value: &str) -> Line<'static> {
+    let prefix = if selected { "› " } else { "  " };
+    let left_label = format!("{label} ");
+    let left_len = prefix.chars().count() + left_label.chars().count() + hint.chars().count();
+    let value_len = value.chars().count();
+    let right_padding = 1usize;
+    let min_gap = 2usize;
+
+    let usable = width.saturating_sub(right_padding);
+    let pad_len = usable.saturating_sub(left_len + min_gap + value_len);
+    let pad = " ".repeat(pad_len + min_gap);
+
+    let prefix_style = if selected {
+        Style::default().fg(kdr::ORANGE).bold()
+    } else {
+        Style::default().fg(kdr::MUTED)
+    };
+
+    let label_style = if selected {
+        Style::default().fg(kdr::FG).bold()
+    } else {
+        Style::default().fg(kdr::FG)
+    };
+
+    let value_style = if selected {
+        Style::default().fg(kdr::FG).bold()
+    } else {
+        Style::default().fg(kdr::FG)
+    };
+
+    Line::from(vec![
+        Span::styled(prefix, prefix_style),
+        Span::styled(left_label, label_style),
+        Span::styled(hint.to_string(), Style::default().fg(kdr::MUTED)),
+        Span::raw(pad),
+        Span::styled(value.to_string(), value_style),
+        Span::raw(" ".repeat(right_padding)),
+    ])
+}
+
+fn fill_rect(
+    buf: &mut ratatui::buffer::Buffer,
+    bounds: Rect,
+    x: u16,
+    y: u16,
+    w: u16,
+    h: u16,
+    st: Style,
+) {
+    if w == 0 || h == 0 {
+        return;
+    }
+
+    let x2 = x.saturating_add(w);
+    let y2 = y.saturating_add(h);
+
+    let xmin = x.max(bounds.x);
+    let ymin = y.max(bounds.y);
+    let xmax = x2.min(bounds.x + bounds.width);
+    let ymax = y2.min(bounds.y + bounds.height);
+
+    for yy in ymin..ymax {
+        for xx in xmin..xmax {
+            buf[(xx, yy)].set_char(' ').set_style(st);
+        }
+    }
+}
+
+fn vline(
+    buf: &mut ratatui::buffer::Buffer,
+    bounds: Rect,
+    x: u16,
+    y: u16,
+    h: u16,
+    ch: char,
+    st: Style,
+) {
+    if h == 0 || x < bounds.x || x >= bounds.x + bounds.width {
+        return;
+    }
+
+    let y2 = y.saturating_add(h);
+    let ymin = y.max(bounds.y);
+    let ymax = y2.min(bounds.y + bounds.height);
+
+    for yy in ymin..ymax {
+        buf[(x, yy)].set_char(ch).set_style(st);
+    }
 }
