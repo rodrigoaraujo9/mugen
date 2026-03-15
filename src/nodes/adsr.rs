@@ -1,13 +1,14 @@
 use crate::patch::{Gate, Node, SynthSource};
 use rodio::Source;
-use std::{sync::atomic::Ordering, time::Duration};
+use std::sync::atomic::Ordering;
+use std::time::Duration;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Adsr {
-    pub attack_s: f32,  // sec
-    pub decay_s: f32,   // sec
-    pub sustain: f32,   // 0..1
-    pub release_s: f32, // sec
+    pub attack_s: f32,
+    pub decay_s: f32,
+    pub sustain: f32,
+    pub release_s: f32,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -16,7 +17,7 @@ pub struct AdsrEnvelope {
     pub attack_step: f32,
     pub decay_step: f32,
     pub release_step: f32,
-    pub release_samples: f32, // needed to calc release step from current amp on early release
+    pub release_samples: f32,
 }
 
 impl Adsr {
@@ -29,14 +30,13 @@ impl Adsr {
         }
     }
 
-    pub fn to_envelope(&self, sample_rate: u32) -> AdsrEnvelope {
+    pub fn to_envelope(self, sample_rate: u32) -> AdsrEnvelope {
         let sr = sample_rate as f32;
+        let sustain = self.sustain.clamp(0.0, 1.0);
 
         let attack_samples = (self.attack_s.max(0.0) * sr).max(1.0);
         let decay_samples = (self.decay_s.max(0.0) * sr).max(1.0);
         let release_samples = (self.release_s.max(0.0) * sr).max(1.0);
-
-        let sustain = self.sustain.clamp(0.0, 1.0);
 
         AdsrEnvelope {
             sustain,
@@ -58,9 +58,9 @@ enum Stage {
 }
 
 pub struct AdsrNode {
-    pub adsr: Adsr,
-    pub sample_rate: u32,
-    pub gate: Gate,
+    adsr: Adsr,
+    sample_rate: u32,
+    gate: Gate,
 }
 
 impl AdsrNode {
@@ -73,67 +73,67 @@ impl AdsrNode {
     }
 }
 
-pub struct AdsrSource {
+struct AdsrSource {
     input: SynthSource,
     envelope: AdsrEnvelope,
     gate: Gate,
     sample_rate: u32,
     stage: Stage,
-    current_amp: f32,
+    amp: f32,
 }
 
 impl AdsrSource {
-    pub fn new(input: SynthSource, adsr: Adsr, sample_rate: u32, gate: Gate) -> Self {
+    fn new(input: SynthSource, adsr: Adsr, sample_rate: u32, gate: Gate) -> Self {
         Self {
             input,
             envelope: adsr.to_envelope(sample_rate),
             gate,
             sample_rate,
             stage: Stage::Attack,
-            current_amp: 0.0,
+            amp: 0.0,
         }
     }
 
-    fn step_envelope(&mut self) -> f32 {
+    fn step(&mut self) -> f32 {
         if !self.gate.load(Ordering::Relaxed)
             && self.stage != Stage::Release
             && self.stage != Stage::Done
         {
             self.stage = Stage::Release;
-            self.envelope.release_step = self.current_amp / self.envelope.release_samples;
+            self.envelope.release_step = self.amp / self.envelope.release_samples;
         }
 
         match self.stage {
             Stage::Attack => {
-                self.current_amp += self.envelope.attack_step;
-                if self.current_amp >= 1.0 {
-                    self.current_amp = 1.0;
+                self.amp += self.envelope.attack_step;
+                if self.amp >= 1.0 {
+                    self.amp = 1.0;
                     self.stage = Stage::Decay;
                 }
             }
             Stage::Decay => {
-                self.current_amp -= self.envelope.decay_step;
-                if self.current_amp <= self.envelope.sustain {
-                    self.current_amp = self.envelope.sustain;
+                self.amp -= self.envelope.decay_step;
+                if self.amp <= self.envelope.sustain {
+                    self.amp = self.envelope.sustain;
                     self.stage = Stage::Sustain;
                 }
             }
             Stage::Sustain => {
-                self.current_amp = self.envelope.sustain;
+                self.amp = self.envelope.sustain;
             }
             Stage::Release => {
-                self.current_amp -= self.envelope.release_step;
-                if self.current_amp <= 0.0 {
-                    self.current_amp = 0.0;
+                self.amp -= self.envelope.release_step;
+                if self.amp <= 0.0 {
+                    self.amp = 0.0;
                     self.stage = Stage::Done;
                 }
             }
             Stage::Done => {
-                self.current_amp = 0.0;
+                self.amp = 0.0;
             }
         }
 
-        self.current_amp
+        self.amp
     }
 }
 
@@ -146,7 +146,7 @@ impl Iterator for AdsrSource {
         }
 
         let x = self.input.next()?;
-        let env = self.step_envelope();
+        let env = self.step();
 
         if self.stage == Stage::Done {
             return None;

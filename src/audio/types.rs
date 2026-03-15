@@ -7,6 +7,7 @@ use crate::nodes::lowpass::LowPassParams;
 pub struct AudioSnapshot {
     pub volume: f32,
     pub muted: bool,
+    pub generator_kind: BasicKind,
     pub patch_name: String,
     pub adsr: Adsr,
     pub lfo: LfoAmpParams,

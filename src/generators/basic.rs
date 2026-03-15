@@ -2,8 +2,7 @@ use crate::config::{AMP_DEFAULT, SAMPLE_RATE};
 use crate::patch::{Generator, SynthSource};
 use rodio::Source;
 use std::f32::consts::TAU;
-use std::sync::Arc;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -16,23 +15,25 @@ pub enum BasicKind {
 }
 
 impl BasicKind {
+    #[inline]
     pub fn toggle(self) -> Self {
         match self {
-            BasicKind::Sine => BasicKind::Saw,
-            BasicKind::Saw => BasicKind::Square,
-            BasicKind::Square => BasicKind::Triangle,
-            BasicKind::Triangle => BasicKind::Noise,
-            BasicKind::Noise => BasicKind::Sine,
+            Self::Sine => Self::Saw,
+            Self::Saw => Self::Square,
+            Self::Square => Self::Triangle,
+            Self::Triangle => Self::Noise,
+            Self::Noise => Self::Sine,
         }
     }
 
+    #[inline]
     pub fn name(self) -> &'static str {
         match self {
-            BasicKind::Sine => "Sine",
-            BasicKind::Saw => "Saw",
-            BasicKind::Square => "Square",
-            BasicKind::Triangle => "Triangle",
-            BasicKind::Noise => "Noise",
+            Self::Sine => "Sine",
+            Self::Saw => "Saw",
+            Self::Square => "Square",
+            Self::Triangle => "Triangle",
+            Self::Noise => "Noise",
         }
     }
 }
@@ -54,32 +55,35 @@ impl Default for BasicGeneratorParams {
     }
 }
 
-pub type SharedBasicGeneratorParams = Arc<RwLock<BasicGeneratorParams>>;
+type SharedParams = Arc<RwLock<BasicGeneratorParams>>;
 
 pub fn basic_generator(kind: BasicKind) -> Arc<BasicGenerator> {
     Arc::new(BasicGenerator::new(kind))
 }
 
 pub struct BasicGenerator {
-    params: SharedBasicGeneratorParams,
+    params: SharedParams,
 }
 
 impl BasicGenerator {
     pub fn new(kind: BasicKind) -> Self {
-        Self {
-            params: Arc::new(RwLock::new(BasicGeneratorParams {
-                kind,
-                ..BasicGeneratorParams::default()
-            })),
-        }
+        Self::from_params(BasicGeneratorParams {
+            kind,
+            ..BasicGeneratorParams::default()
+        })
     }
 
     pub fn from_params(params: BasicGeneratorParams) -> Self {
         Self {
-            params: Arc::new(RwLock::new(params)),
+            params: Arc::new(RwLock::new(BasicGeneratorParams {
+                kind: params.kind,
+                amplitude: params.amplitude.max(0.0),
+                sample_rate: params.sample_rate.max(1),
+            })),
         }
     }
 
+    #[inline]
     pub fn params(&self) -> BasicGeneratorParams {
         *self.params.read().unwrap()
     }
@@ -99,12 +103,7 @@ impl BasicGenerator {
 
 impl Generator for BasicGenerator {
     fn create(&self, frequency: f32) -> SynthSource {
-        let params = self.params();
-        Box::new(BasicSource::new(
-            self.params.clone(),
-            frequency,
-            params.sample_rate,
-        ))
+        Box::new(BasicSource::new(self.params.clone(), frequency))
     }
 
     fn name(&self) -> &'static str {
@@ -113,32 +112,35 @@ impl Generator for BasicGenerator {
 }
 
 struct BasicSource {
-    params: SharedBasicGeneratorParams,
+    params: SharedParams,
     frequency: f32,
-    sample_rate: u32,
     phase: f32,
     rng: u64,
 }
 
 impl BasicSource {
-    fn new(params: SharedBasicGeneratorParams, frequency: f32, sample_rate: u32) -> Self {
+    fn new(params: SharedParams, frequency: f32) -> Self {
         Self {
             params,
             frequency: frequency.max(0.0),
-            sample_rate: sample_rate.max(1),
             phase: 0.0,
             rng: 0x1234_5678_9ABC_DEF0,
         }
     }
 
+    fn live_sample_rate(&self) -> u32 {
+        self.params.read().unwrap().sample_rate.max(1)
+    }
+
     fn step_phase(&mut self) -> f32 {
-        let p = self.phase;
-        let inc = self.frequency / self.sample_rate as f32;
-        self.phase += inc;
+        let phase = self.phase;
+        self.phase += self.frequency / self.live_sample_rate() as f32;
+
         if self.phase >= 1.0 {
             self.phase -= self.phase.floor();
         }
-        p
+
+        phase
     }
 
     fn next_noise(&mut self) -> f32 {
@@ -147,9 +149,11 @@ impl BasicSource {
         x ^= x << 25;
         x ^= x >> 27;
         self.rng = x;
-        let y = x.wrapping_mul(0x2545F4914F6CDD1D);
+
+        let y = x.wrapping_mul(0x2545_F491_4F6C_DD1D);
         let u = (y >> 40) as u32;
         let f = u as f32 / ((1u32 << 24) as f32);
+
         2.0 * f - 1.0
     }
 }
@@ -196,7 +200,7 @@ impl Source for BasicSource {
     }
 
     fn sample_rate(&self) -> u32 {
-        self.sample_rate
+        self.live_sample_rate()
     }
 
     fn total_duration(&self) -> Option<Duration> {

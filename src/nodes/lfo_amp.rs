@@ -2,8 +2,7 @@ use crate::generators::basic::BasicKind;
 use crate::nodes::lfo::LfoOsc;
 use crate::patch::{Node, SynthSource};
 use rodio::Source;
-use std::sync::Arc;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 #[derive(Debug, Clone, Copy)]
@@ -14,29 +13,35 @@ pub struct LfoAmpParams {
     pub base_gain: f32,
 }
 
+type SharedParams = Arc<RwLock<LfoAmpParams>>;
+
 #[derive(Clone)]
 pub struct LfoAmp {
-    params: Arc<RwLock<LfoAmpParams>>,
+    params: SharedParams,
 }
 
 impl LfoAmp {
     pub fn new(kind: BasicKind, rate_hz: f32, depth: f32) -> Self {
-        Self {
-            params: Arc::new(RwLock::new(LfoAmpParams {
-                kind,
-                rate_hz,
-                depth,
-                base_gain: 1.0,
-            })),
-        }
+        Self::from_params(LfoAmpParams {
+            kind,
+            rate_hz,
+            depth,
+            base_gain: 1.0,
+        })
     }
 
     pub fn from_params(params: LfoAmpParams) -> Self {
         Self {
-            params: Arc::new(RwLock::new(params)),
+            params: Arc::new(RwLock::new(LfoAmpParams {
+                kind: params.kind,
+                rate_hz: params.rate_hz.max(0.0),
+                depth: params.depth.clamp(0.0, 1.0),
+                base_gain: params.base_gain.max(0.0),
+            })),
         }
     }
 
+    #[inline]
     pub fn params(&self) -> LfoAmpParams {
         *self.params.read().unwrap()
     }
@@ -69,12 +74,12 @@ impl LfoAmp {
 
 impl Node for LfoAmp {
     fn apply(&self, input: SynthSource) -> SynthSource {
+        let params = self.params();
         let sr = input.sample_rate().max(1);
-        let initial = self.params();
 
         Box::new(LfoAmpSource {
             input,
-            lfo: LfoOsc::new(initial.kind, initial.rate_hz, sr),
+            lfo: LfoOsc::new(params.kind, params.rate_hz, sr),
             params: self.params.clone(),
         })
     }
@@ -87,7 +92,7 @@ impl Node for LfoAmp {
 struct LfoAmpSource {
     input: SynthSource,
     lfo: LfoOsc,
-    params: Arc<RwLock<LfoAmpParams>>,
+    params: SharedParams,
 }
 
 impl Iterator for LfoAmpSource {
@@ -95,9 +100,9 @@ impl Iterator for LfoAmpSource {
 
     fn next(&mut self) -> Option<f32> {
         let x = self.input.next()?;
-        self.lfo.sync_sr(self.input.sample_rate());
-
         let params = *self.params.read().unwrap();
+
+        self.lfo.sync_sr(self.input.sample_rate());
         self.lfo.set_kind(params.kind);
         self.lfo.set_rate_hz(params.rate_hz);
 

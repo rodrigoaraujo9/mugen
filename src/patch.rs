@@ -1,7 +1,6 @@
 use rodio::Source;
-use std::sync::Arc;
-use std::sync::RwLock;
 use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, RwLock};
 
 pub type SynthSource = Box<dyn Source<Item = f32> + Send>;
 pub type Gate = Arc<AtomicBool>;
@@ -31,10 +30,12 @@ impl Patch {
         }
     }
 
-    pub fn generator(&self) -> &SharedGenerator {
-        &self.generator
+    #[inline]
+    pub fn generator(&self) -> SharedGenerator {
+        self.generator.clone()
     }
 
+    #[inline]
     pub fn nodes(&self) -> Vec<SharedNode> {
         self.nodes.read().unwrap().clone()
     }
@@ -49,11 +50,12 @@ impl Patch {
 
     pub fn replace_node(&self, index: usize, node: SharedNode) -> bool {
         let mut nodes = self.nodes.write().unwrap();
-        if index >= nodes.len() {
-            return false;
+        if let Some(slot) = nodes.get_mut(index) {
+            *slot = node;
+            true
+        } else {
+            false
         }
-        nodes[index] = node;
-        true
     }
 
     pub fn clear_nodes(&self) {
@@ -62,13 +64,13 @@ impl Patch {
 
     pub fn create(&self, frequency: f32) -> SynthSource {
         let mut src = self.generator.create(frequency);
-        let nodes = self.nodes.read().unwrap().clone();
-        for node in nodes {
+        for node in self.nodes.read().unwrap().iter().cloned() {
             src = node.apply(src);
         }
         src
     }
 
+    #[inline]
     pub fn name(&self) -> &'static str {
         self.generator.name()
     }

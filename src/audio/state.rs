@@ -4,6 +4,7 @@ use crate::config::{
     ADSR_ATTACK_S, ADSR_DECAY_S, ADSR_RELEASE_S, ADSR_SUSTAIN, CUTOFF, LFO_DEPTH, LFO_KIND,
     LFO_RATE_HZ,
 };
+use crate::generators::basic::BasicKind;
 use crate::nodes::adsr::Adsr;
 use crate::nodes::lfo_amp::LfoAmp;
 use crate::nodes::lowpass::LowPass;
@@ -25,21 +26,21 @@ pub async fn get_handle() -> &'static AudioHandle {
         .get_or_init(|| async {
             let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
 
-            let initial_adsr = Adsr::new(ADSR_ATTACK_S, ADSR_DECAY_S, ADSR_SUSTAIN, ADSR_RELEASE_S);
+            let adsr = Adsr::new(ADSR_ATTACK_S, ADSR_DECAY_S, ADSR_SUSTAIN, ADSR_RELEASE_S);
+            let lfo = LfoAmp::new(LFO_KIND, LFO_RATE_HZ, LFO_DEPTH);
+            let lowpass = LowPass::new(CUTOFF);
 
-            let initial_lfo = LfoAmp::new(LFO_KIND, LFO_RATE_HZ, LFO_DEPTH);
-            let initial_lowpass = LowPass::new(CUTOFF);
-
-            let initial = AudioSnapshot {
+            let snapshot = AudioSnapshot {
                 volume: 1.0,
                 muted: false,
-                patch_name: "Sine".to_string(),
-                adsr: initial_adsr,
-                lfo: initial_lfo.params(),
-                lowpass: initial_lowpass.params(),
+                generator_kind: BasicKind::Sine,
+                patch_name: BasicKind::Sine.name().to_string(),
+                adsr,
+                lfo: lfo.params(),
+                lowpass: lowpass.params(),
             };
 
-            let (snapshot_tx, snapshot_rx) = watch::channel(initial);
+            let (snapshot_tx, snapshot_rx) = watch::channel(snapshot);
             let (held_keys_tx, held_keys_rx) = watch::channel(HashSet::new());
 
             AudioSystem {
@@ -57,7 +58,7 @@ pub async fn get_handle() -> &'static AudioHandle {
         .handle
 }
 
-pub async fn take_runtime_channels() -> (
+pub async fn take_runtime_io() -> (
     mpsc::UnboundedReceiver<AudioCommand>,
     watch::Sender<AudioSnapshot>,
     watch::Sender<HashSet<Keycode>>,
@@ -66,13 +67,15 @@ pub async fn take_runtime_channels() -> (
     let sys = AUDIO
         .get_or_init(|| async { unreachable!("call get_handle() first") })
         .await;
+
     let mut guard = sys.cmd_rx.lock().await;
-    let rx = guard.take().expect("audio runtime already taken");
-    let initial = sys.snapshot_tx.borrow().clone();
+    let cmd_rx = guard.take().expect("audio runtime already taken");
+    let snapshot = sys.snapshot_tx.borrow().clone();
+
     (
-        rx,
+        cmd_rx,
         sys.snapshot_tx.clone(),
         sys.held_keys_tx.clone(),
-        initial,
+        snapshot,
     )
 }

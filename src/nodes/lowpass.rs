@@ -1,8 +1,7 @@
 use crate::patch::{Node, SynthSource};
 use rodio::Source;
 use std::f32::consts::TAU;
-use std::sync::Arc;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 #[derive(Debug, Clone, Copy)]
@@ -10,24 +9,27 @@ pub struct LowPassParams {
     pub cutoff_hz: f32,
 }
 
+type SharedParams = Arc<RwLock<LowPassParams>>;
+
 #[derive(Clone)]
 pub struct LowPass {
-    params: Arc<RwLock<LowPassParams>>,
+    params: SharedParams,
 }
 
 impl LowPass {
     pub fn new(cutoff_hz: f32) -> Self {
-        Self {
-            params: Arc::new(RwLock::new(LowPassParams { cutoff_hz })),
-        }
+        Self::from_params(LowPassParams { cutoff_hz })
     }
 
     pub fn from_params(params: LowPassParams) -> Self {
         Self {
-            params: Arc::new(RwLock::new(params)),
+            params: Arc::new(RwLock::new(LowPassParams {
+                cutoff_hz: params.cutoff_hz.max(1.0),
+            })),
         }
     }
 
+    #[inline]
     pub fn params(&self) -> LowPassParams {
         *self.params.read().unwrap()
     }
@@ -42,7 +44,7 @@ impl LowPass {
         };
     }
 
-    fn calc_alpha(sample_rate: f32, cutoff_hz: f32) -> f32 {
+    fn alpha(sample_rate: f32, cutoff_hz: f32) -> f32 {
         let cutoff_hz = cutoff_hz.clamp(1.0, sample_rate * 0.45);
         let dt = 1.0 / sample_rate;
         let tau = 1.0 / (TAU * cutoff_hz);
@@ -66,7 +68,7 @@ impl Node for LowPass {
 
 struct LowPassSource {
     input: SynthSource,
-    params: Arc<RwLock<LowPassParams>>,
+    params: SharedParams,
     prev_y: f32,
 }
 
@@ -77,9 +79,11 @@ impl Iterator for LowPassSource {
         let x = self.input.next()?;
         let sr = self.input.sample_rate() as f32;
         let cutoff = self.params.read().unwrap().cutoff_hz;
-        let alpha = LowPass::calc_alpha(sr, cutoff);
+        let alpha = LowPass::alpha(sr, cutoff);
+
         let y = alpha * x + (1.0 - alpha) * self.prev_y;
         self.prev_y = y;
+
         Some(y)
     }
 }

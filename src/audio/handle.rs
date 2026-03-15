@@ -11,39 +11,48 @@ use tokio::sync::{mpsc, watch};
 pub struct AudioHandle {
     pub(crate) tx: mpsc::UnboundedSender<AudioCommand>,
     pub(crate) snapshot_rx: watch::Receiver<AudioSnapshot>,
-    pub held_keys_rx: watch::Receiver<HashSet<Keycode>>,
+    pub(crate) held_keys_rx: watch::Receiver<HashSet<Keycode>>,
 }
 
 impl AudioHandle {
-    pub fn set_volume(&self, v: f32) {
-        let _ = self.tx.send(AudioCommand::SetVolume(v));
+    #[inline]
+    fn send(&self, cmd: AudioCommand) {
+        let _ = self.tx.send(cmd);
     }
 
-    pub fn set_muted(&self, m: bool) {
-        let _ = self.tx.send(AudioCommand::SetMuted(m));
+    pub fn set_volume(&self, volume: f32) {
+        self.send(AudioCommand::SetVolume(volume));
+    }
+
+    pub fn set_muted(&self, muted: bool) {
+        self.send(AudioCommand::SetMuted(muted));
     }
 
     pub fn set_generator_kind(&self, kind: BasicKind) {
-        let _ = self.tx.send(AudioCommand::SetGeneratorKind(kind));
+        self.send(AudioCommand::SetGeneratorKind(kind));
     }
 
     pub fn set_adsr(&self, adsr: Adsr) {
-        let _ = self.tx.send(AudioCommand::SetAdsr(adsr));
+        self.send(AudioCommand::SetAdsr(adsr));
     }
 
-    pub fn set_octave(&self, o: i32) {
-        let _ = self.tx.send(AudioCommand::SetOctave(o));
+    pub fn set_octave(&self, octave: i32) {
+        self.send(AudioCommand::SetOctave(octave));
     }
 
-    pub fn set_lfo(&self, lfo: LfoAmpParams) {
-        let _ = self.tx.send(AudioCommand::SetLfo(lfo));
+    pub fn set_lfo(&self, params: LfoAmpParams) {
+        self.send(AudioCommand::SetLfo(params));
     }
 
-    pub fn set_lowpass(&self, lowpass: LowPassParams) {
-        let _ = self.tx.send(AudioCommand::SetLowPass(lowpass));
+    pub fn set_lowpass(&self, params: LowPassParams) {
+        self.send(AudioCommand::SetLowPass(params));
     }
 
     pub fn subscribe(&self) -> watch::Receiver<AudioSnapshot> {
         self.snapshot_rx.clone()
+    }
+
+    pub fn subscribe_held_keys(&self) -> watch::Receiver<HashSet<Keycode>> {
+        self.held_keys_rx.clone()
     }
 }

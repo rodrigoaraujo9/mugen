@@ -83,8 +83,8 @@ impl Key {
 
     #[inline]
     pub fn frequency(self) -> f32 {
-        let semitone_diff = self.absolute_semitone() - A4_SEMITONES;
-        BASE_FREQ * 2.0f32.powf(semitone_diff as f32 / 12.0)
+        let diff = self.absolute_semitone() - A4_SEMITONES;
+        BASE_FREQ * 2.0f32.powf(diff as f32 / 12.0)
     }
 
     #[inline]

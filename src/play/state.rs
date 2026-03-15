@@ -1,5 +1,5 @@
 use crate::audio::AudioSnapshot;
-use crate::generators::basic::{BasicGenerator, BasicKind, basic_generator};
+use crate::generators::basic::{BasicGenerator, basic_generator};
 use crate::nodes::adsr::Adsr;
 use crate::nodes::lfo_amp::LfoAmp;
 use crate::nodes::lowpass::LowPass;
@@ -8,9 +8,8 @@ use device_query::Keycode;
 use rodio::Sink;
 use rodio::stream::{OutputStream, OutputStreamBuilder};
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
-use std::sync::RwLock;
 use std::sync::atomic::Ordering;
+use std::sync::{Arc, RwLock};
 
 pub type ActiveNote = (Sink, Gate);
 
@@ -21,23 +20,22 @@ pub struct PlayState {
 
 impl PlayState {
     pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        let stream = OutputStreamBuilder::open_default_stream()?;
         Ok(Self {
-            stream,
+            stream: OutputStreamBuilder::open_default_stream()?,
             active_sinks: HashMap::new(),
         })
     }
 
     pub fn stop_note(&mut self, keycode: Keycode) {
         if let Some(voices) = self.active_sinks.get_mut(&keycode) {
-            for (_sink, gate) in voices.iter_mut() {
+            for (_, gate) in voices.iter_mut() {
                 gate.store(false, Ordering::Relaxed);
             }
         }
     }
 
     pub fn kill_all(&mut self) {
-        for (_k, mut voices) in self.active_sinks.drain() {
+        for (_, mut voices) in self.active_sinks.drain() {
             for (sink, gate) in voices.drain(..) {
                 gate.store(false, Ordering::Relaxed);
                 sink.stop();
@@ -52,17 +50,17 @@ impl PlayState {
         });
     }
 
-    pub fn set_all_volume(&mut self, v: f32) {
+    pub fn set_all_volume(&mut self, volume: f32) {
         for voices in self.active_sinks.values_mut() {
-            for (sink, _) in voices.iter_mut() {
-                sink.set_volume(v);
+            for (sink, _) in voices {
+                sink.set_volume(volume);
             }
         }
     }
 
     pub fn set_all_muted(&mut self, muted: bool) {
         for voices in self.active_sinks.values_mut() {
-            for (sink, _) in voices.iter_mut() {
+            for (sink, _) in voices {
                 if muted {
                     sink.pause();
                 } else {
@@ -76,47 +74,68 @@ impl PlayState {
 pub struct RuntimeState {
     pub volume: f32,
     pub muted: bool,
+    pub octave_offset: i32,
+    pub held_keys: HashSet<Keycode>,
+
     pub adsr: Arc<RwLock<Adsr>>,
     pub basic_generator: Arc<BasicGenerator>,
     pub lfo: LfoAmp,
     pub lowpass: LowPass,
     pub patch: Arc<Patch>,
-    pub held_keys: HashSet<Keycode>,
-    pub octave_offset: i32,
 }
 
 impl RuntimeState {
-    pub fn new(initial: AudioSnapshot) -> Self {
-        let basic_generator = basic_generator(BasicKind::Sine);
+    pub fn new(snapshot: AudioSnapshot) -> Self {
+        let basic_generator = basic_generator(snapshot.generator_kind);
         let generator: SharedGenerator = basic_generator.clone();
 
-        let lfo = LfoAmp::from_params(initial.lfo);
-        let lowpass = LowPass::from_params(initial.lowpass);
+        let lfo = LfoAmp::from_params(snapshot.lfo);
+        let lowpass = LowPass::from_params(snapshot.lowpass);
 
         let patch = Arc::new(Patch::new(generator));
-
-        let lfo_node: SharedNode = Arc::new(lfo.clone());
-        let lowpass_node: SharedNode = Arc::new(lowpass.clone());
-        patch.set_nodes(vec![lfo_node, lowpass_node]);
+        patch.set_nodes(vec![
+            Arc::new(lfo.clone()) as SharedNode,
+            Arc::new(lowpass.clone()) as SharedNode,
+        ]);
 
         Self {
-            volume: initial.volume,
-            muted: initial.muted,
-            adsr: Arc::new(RwLock::new(initial.adsr)),
+            volume: snapshot.volume,
+            muted: snapshot.muted,
+            octave_offset: 0,
+            held_keys: HashSet::new(),
+            adsr: Arc::new(RwLock::new(snapshot.adsr)),
             basic_generator,
             lfo,
             lowpass,
             patch,
-            held_keys: HashSet::new(),
-            octave_offset: 0,
         }
     }
 
-    pub fn patch_name(&self) -> String {
-        self.basic_generator.params().kind.name().to_string()
+    #[inline]
+    pub fn adsr(&self) -> Adsr {
+        *self.adsr.read().unwrap()
     }
 
-    pub fn adsr_value(&self) -> Adsr {
-        *self.adsr.read().unwrap()
+    #[inline]
+    pub fn generator_kind(&self) -> crate::generators::basic::BasicKind {
+        self.basic_generator.params().kind
+    }
+
+    #[inline]
+    pub fn patch_name(&self) -> String {
+        self.generator_kind().name().to_string()
+    }
+
+    #[inline]
+    pub fn snapshot(&self) -> AudioSnapshot {
+        AudioSnapshot {
+            volume: self.volume,
+            muted: self.muted,
+            generator_kind: self.generator_kind(),
+            patch_name: self.patch_name(),
+            adsr: self.adsr(),
+            lfo: self.lfo.params(),
+            lowpass: self.lowpass.params(),
+        }
     }
 }
