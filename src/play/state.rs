@@ -78,7 +78,7 @@ pub struct RuntimeState {
     pub held_keys: HashSet<Keycode>,
 
     pub adsr: Arc<RwLock<Adsr>>,
-    pub basic_generator: Arc<BasicGenerator>,
+    pub generator: Arc<BasicGenerator>,
     pub lfo: LfoAmp,
     pub lowpass: LowPass,
     pub patch: Arc<Patch>,
@@ -104,7 +104,7 @@ impl RuntimeState {
             octave_offset: 0,
             held_keys: HashSet::new(),
             adsr: Arc::new(RwLock::new(snapshot.adsr)),
-            basic_generator,
+            generator: basic_generator,
             lfo,
             lowpass,
             patch,
@@ -118,7 +118,7 @@ impl RuntimeState {
 
     #[inline]
     pub fn generator_kind(&self) -> crate::generators::basic::BasicKind {
-        self.basic_generator.params().kind
+        self.generator.params().kind
     }
 
     #[inline]

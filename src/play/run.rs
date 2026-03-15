@@ -15,6 +15,11 @@ use std::thread::sleep;
 use std::time::Duration;
 use tokio::{signal::ctrl_c, task};
 
+enum RuntimeEvent {
+    KeysChanged(HashSet<Keycode>),
+    Exit,
+}
+
 #[inline]
 fn sync_snapshot(tx: &tokio::sync::watch::Sender<audio::AudioSnapshot>, rt: &RuntimeState) {
     let _ = tx.send(rt.snapshot());
@@ -49,7 +54,6 @@ async fn restart_active_notes(play: &mut PlayState, rt: &RuntimeState) {
     let held: Vec<_> = rt.held_keys.iter().copied().collect();
 
     play.kill_all();
-
     for key in held {
         play_note(play, rt, key).await;
     }
@@ -58,7 +62,7 @@ async fn restart_active_notes(play: &mut PlayState, rt: &RuntimeState) {
 #[inline]
 fn cycle_generator(rt: &RuntimeState) {
     let next = rt.generator_kind().toggle();
-    rt.basic_generator.set_kind(next);
+    rt.generator.set_kind(next);
 }
 
 pub async fn runtime(
@@ -74,13 +78,11 @@ pub async fn runtime(
     sync_snapshot(&snapshot_tx, &rt);
 
     let stop_flag = Arc::new(AtomicBool::new(false));
-    let stop_flag_bg = stop_flag.clone();
+    let stop_flag_bg = Arc::clone(&stop_flag);
 
-    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<
-        Option<(HashSet<Keycode>, HashSet<Keycode>, bool)>,
-    >();
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<RuntimeEvent>();
 
-    let focused_bg = focused.clone();
+    let focused_bg = Arc::clone(&focused);
     let poll_handle = task::spawn_blocking(move || {
         let device_state = DeviceState::new();
         let mut prev = HashSet::new();
@@ -88,7 +90,7 @@ pub async fn runtime(
 
         loop {
             if stop_flag_bg.load(Ordering::Relaxed) {
-                let _ = tx.send(None);
+                let _ = tx.send(RuntimeEvent::Exit);
                 break;
             }
 
@@ -99,7 +101,7 @@ pub async fn runtime(
             if !is_focused {
                 if was_focused {
                     if !prev.is_empty() {
-                        let _ = tx.send(Some((HashSet::new(), prev.clone(), false)));
+                        let _ = tx.send(RuntimeEvent::KeysChanged(HashSet::new()));
                         prev.clear();
                     }
                     was_focused = false;
@@ -118,13 +120,12 @@ pub async fn runtime(
             if now.contains(&Keycode::Escape)
                 || (now.contains(&Keycode::C) && now.contains(&Keycode::LControl))
             {
-                let _ = tx.send(None);
+                let _ = tx.send(RuntimeEvent::Exit);
                 break;
             }
 
             if now != prev {
-                let toggle_b = now.contains(&Keycode::B) && !prev.contains(&Keycode::B);
-                let _ = tx.send(Some((now.clone(), prev.clone(), toggle_b)));
+                let _ = tx.send(RuntimeEvent::KeysChanged(now.clone()));
                 prev = now;
             }
         }
@@ -132,6 +133,8 @@ pub async fn runtime(
 
     let ctrl_c = ctrl_c();
     tokio::pin!(ctrl_c);
+
+    let mut last_keys: HashSet<Keycode> = HashSet::new();
 
     loop {
         tokio::select! {
@@ -145,8 +148,17 @@ pub async fn runtime(
 
             msg = rx.recv() => {
                 match msg {
-                    Some(Some((now, prev, toggle_b))) => {
-                        rt.held_keys = now.iter().copied().filter(|k| *k != Keycode::B).collect();
+                    Some(RuntimeEvent::KeysChanged(now)) => {
+                        let toggle_b =
+                            now.contains(&Keycode::B) && !last_keys.contains(&Keycode::B);
+
+                        let musical_now: HashSet<Keycode> =
+                            now.iter().copied().filter(|k| *k != Keycode::B).collect();
+
+                        let musical_prev: HashSet<Keycode> =
+                            last_keys.iter().copied().filter(|k| *k != Keycode::B).collect();
+
+                        rt.held_keys = musical_now.clone();
                         let _ = held_keys_tx.send(rt.held_keys.clone());
 
                         if toggle_b {
@@ -155,22 +167,19 @@ pub async fn runtime(
                             restart_active_notes(&mut play, &rt).await;
                         }
 
-                        for key in now.difference(&prev) {
-                            if *key != Keycode::B {
-                                play_note(&mut play, &rt, *key).await;
-                            }
+                        for key in musical_now.difference(&musical_prev) {
+                            play_note(&mut play, &rt, *key).await;
                         }
 
-                        for key in prev.difference(&now) {
-                            if *key != Keycode::B {
-                                play.stop_note(*key);
-                            }
+                        for key in musical_prev.difference(&musical_now) {
+                            play.stop_note(*key);
                         }
 
                         play.cleanup_finished();
+                        last_keys = now;
                     }
 
-                    Some(None) | None => break,
+                    Some(RuntimeEvent::Exit) | None => break,
                 }
             }
 
@@ -191,7 +200,7 @@ pub async fn runtime(
                     }
 
                     AudioCommand::SetGeneratorKind(kind) => {
-                        rt.basic_generator.set_kind(kind);
+                        rt.generator.set_kind(kind);
                         sync_snapshot(&snapshot_tx, &rt);
                         restart_active_notes(&mut play, &rt).await;
                     }
