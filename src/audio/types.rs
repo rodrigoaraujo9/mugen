@@ -1,27 +1,24 @@
+use crate::generators::basic::BasicKind;
 use crate::nodes::adsr::Adsr;
-use crate::nodes::lfo_amp::LfoAmp;
-use crate::nodes::lowpass::LowPass;
-use crate::patch::Generator;
+use crate::nodes::lfo_amp::LfoAmpParams;
+use crate::nodes::lowpass::LowPassParams;
 
-/// current audio state that the UI can read (volume/mute + which source is active)
 #[derive(Debug, Clone)]
 pub struct AudioSnapshot {
     pub volume: f32,
     pub muted: bool,
     pub patch_name: String,
     pub adsr: Adsr,
-    pub lfo: LfoAmp,
-    pub lowpass: LowPass,
+    pub lfo: LfoAmpParams,
+    pub lowpass: LowPassParams,
 }
 
-/// cmds that the UI sends to the audio runtime to change behavior
 pub enum AudioCommand {
     SetVolume(f32),
     SetMuted(bool),
-    TogglePatch(Vec<Box<dyn Generator>>),
-    SetPatch(Box<dyn Generator>),
+    SetGeneratorKind(BasicKind),
     SetAdsr(Adsr),
     SetOctave(i32),
-    SetLFOAmp(LfoAmp),
-    SetLowPass(LowPass),
+    SetLfo(LfoAmpParams),
+    SetLowPass(LowPassParams),
 }

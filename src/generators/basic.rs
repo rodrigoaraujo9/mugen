@@ -1,7 +1,9 @@
-use crate::config::{AMP_DEFAULT, ENDLESS, SAMPLE_RATE};
+use crate::config::{AMP_DEFAULT, SAMPLE_RATE};
 use crate::patch::{Generator, SynthSource};
 use rodio::Source;
-use rodio::source::{SawtoothWave, SineWave, SquareWave, TriangleWave};
+use std::f32::consts::TAU;
+use std::sync::Arc;
+use std::sync::RwLock;
 use std::time::Duration;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,89 +38,107 @@ impl BasicKind {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct NoiseParams {
-    seed: u64,
-    sample_rate: u32,
+pub struct BasicGeneratorParams {
+    pub kind: BasicKind,
+    pub amplitude: f32,
+    pub sample_rate: u32,
 }
 
-pub fn basic_generator(kind: BasicKind) -> Box<dyn Generator> {
-    let noise = if kind == BasicKind::Noise {
-        Some(NoiseParams {
-            seed: 0x1234_5678_9ABC_DEF0,
+impl Default for BasicGeneratorParams {
+    fn default() -> Self {
+        Self {
+            kind: BasicKind::Sine,
+            amplitude: AMP_DEFAULT,
             sample_rate: SAMPLE_RATE,
-        })
-    } else {
-        None
-    };
-
-    Box::new(BasicGenerator {
-        kind,
-        amplitude: AMP_DEFAULT,
-        duration: ENDLESS,
-        noise,
-    })
+        }
+    }
 }
 
-struct BasicGenerator {
-    kind: BasicKind,
-    amplitude: f32,
-    duration: Duration,
-    noise: Option<NoiseParams>,
+pub type SharedBasicGeneratorParams = Arc<RwLock<BasicGeneratorParams>>;
+
+pub fn basic_generator(kind: BasicKind) -> Arc<BasicGenerator> {
+    Arc::new(BasicGenerator::new(kind))
+}
+
+pub struct BasicGenerator {
+    params: SharedBasicGeneratorParams,
+}
+
+impl BasicGenerator {
+    pub fn new(kind: BasicKind) -> Self {
+        Self {
+            params: Arc::new(RwLock::new(BasicGeneratorParams {
+                kind,
+                ..BasicGeneratorParams::default()
+            })),
+        }
+    }
+
+    pub fn from_params(params: BasicGeneratorParams) -> Self {
+        Self {
+            params: Arc::new(RwLock::new(params)),
+        }
+    }
+
+    pub fn params(&self) -> BasicGeneratorParams {
+        *self.params.read().unwrap()
+    }
+
+    pub fn set_kind(&self, kind: BasicKind) {
+        self.params.write().unwrap().kind = kind;
+    }
+
+    pub fn set_amplitude(&self, amplitude: f32) {
+        self.params.write().unwrap().amplitude = amplitude.max(0.0);
+    }
+
+    pub fn set_sample_rate(&self, sample_rate: u32) {
+        self.params.write().unwrap().sample_rate = sample_rate.max(1);
+    }
 }
 
 impl Generator for BasicGenerator {
     fn create(&self, frequency: f32) -> SynthSource {
-        match self.kind {
-            BasicKind::Sine => Box::new(
-                SineWave::new(frequency)
-                    .amplify(self.amplitude)
-                    .take_duration(self.duration),
-            ),
-
-            BasicKind::Square => Box::new(
-                SquareWave::new(frequency)
-                    .amplify(self.amplitude)
-                    .take_duration(self.duration),
-            ),
-
-            BasicKind::Triangle => Box::new(
-                TriangleWave::new(frequency)
-                    .amplify(self.amplitude)
-                    .take_duration(self.duration),
-            ),
-
-            BasicKind::Saw => Box::new(
-                SawtoothWave::new(frequency)
-                    .amplify(self.amplitude)
-                    .take_duration(self.duration),
-            ),
-
-            BasicKind::Noise => {
-                let p = self
-                    .noise
-                    .expect("Noise params missing for BasicKind::Noise");
-                Box::new(
-                    NoiseGen::new(p.seed, p.sample_rate)
-                        .amplify(self.amplitude)
-                        .take_duration(self.duration),
-                )
-            }
-        }
+        let params = self.params();
+        Box::new(BasicSource::new(
+            self.params.clone(),
+            frequency,
+            params.sample_rate,
+        ))
     }
 
     fn name(&self) -> &'static str {
-        self.kind.name()
+        self.params().kind.name()
     }
 }
 
-struct NoiseGen {
+struct BasicSource {
+    params: SharedBasicGeneratorParams,
+    frequency: f32,
+    sample_rate: u32,
+    phase: f32,
     rng: u64,
-    sr: u32,
 }
 
-impl NoiseGen {
-    fn new(seed: u64, sr: u32) -> Self {
-        Self { rng: seed, sr }
+impl BasicSource {
+    fn new(params: SharedBasicGeneratorParams, frequency: f32, sample_rate: u32) -> Self {
+        Self {
+            params,
+            frequency: frequency.max(0.0),
+            sample_rate: sample_rate.max(1),
+            phase: 0.0,
+            rng: 0x1234_5678_9ABC_DEF0,
+        }
+    }
+
+    fn step_phase(&mut self) -> f32 {
+        let p = self.phase;
+        let inc = self.frequency / self.sample_rate as f32;
+        self.phase += inc;
+        if self.phase >= 1.0 {
+            self.phase -= self.phase.floor();
+        }
+        p
     }
 
     fn next_noise(&mut self) -> f32 {
@@ -128,30 +148,57 @@ impl NoiseGen {
         x ^= x >> 27;
         self.rng = x;
         let y = x.wrapping_mul(0x2545F4914F6CDD1D);
-
         let u = (y >> 40) as u32;
         let f = u as f32 / ((1u32 << 24) as f32);
         2.0 * f - 1.0
     }
 }
 
-impl Iterator for NoiseGen {
+impl Iterator for BasicSource {
     type Item = f32;
+
     fn next(&mut self) -> Option<f32> {
-        Some(self.next_noise())
+        let params = *self.params.read().unwrap();
+        let amp = params.amplitude.max(0.0);
+
+        let y = match params.kind {
+            BasicKind::Sine => (TAU * self.step_phase()).sin(),
+            BasicKind::Square => {
+                if self.step_phase() < 0.5 {
+                    1.0
+                } else {
+                    -1.0
+                }
+            }
+            BasicKind::Triangle => {
+                let p = self.step_phase();
+                if p < 0.5 {
+                    -1.0 + 4.0 * p
+                } else {
+                    3.0 - 4.0 * p
+                }
+            }
+            BasicKind::Saw => 2.0 * self.step_phase() - 1.0,
+            BasicKind::Noise => self.next_noise(),
+        };
+
+        Some(y * amp)
     }
 }
 
-impl Source for NoiseGen {
+impl Source for BasicSource {
     fn current_span_len(&self) -> Option<usize> {
         None
     }
+
     fn channels(&self) -> u16 {
         1
     }
+
     fn sample_rate(&self) -> u32 {
-        self.sr
+        self.sample_rate
     }
+
     fn total_duration(&self) -> Option<Duration> {
         None
     }

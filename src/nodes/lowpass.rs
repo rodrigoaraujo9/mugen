@@ -1,15 +1,45 @@
 use crate::patch::{Node, SynthSource};
 use rodio::Source;
-use std::{f32::consts::TAU, time::Duration};
+use std::f32::consts::TAU;
+use std::sync::Arc;
+use std::sync::RwLock;
+use std::time::Duration;
 
 #[derive(Debug, Clone, Copy)]
-pub struct LowPass {
+pub struct LowPassParams {
     pub cutoff_hz: f32,
+}
+
+#[derive(Clone)]
+pub struct LowPass {
+    params: Arc<RwLock<LowPassParams>>,
 }
 
 impl LowPass {
     pub fn new(cutoff_hz: f32) -> Self {
-        Self { cutoff_hz }
+        Self {
+            params: Arc::new(RwLock::new(LowPassParams { cutoff_hz })),
+        }
+    }
+
+    pub fn from_params(params: LowPassParams) -> Self {
+        Self {
+            params: Arc::new(RwLock::new(params)),
+        }
+    }
+
+    pub fn params(&self) -> LowPassParams {
+        *self.params.read().unwrap()
+    }
+
+    pub fn set_cutoff_hz(&self, cutoff_hz: f32) {
+        self.params.write().unwrap().cutoff_hz = cutoff_hz.max(1.0);
+    }
+
+    pub fn set_all(&self, params: LowPassParams) {
+        *self.params.write().unwrap() = LowPassParams {
+            cutoff_hz: params.cutoff_hz.max(1.0),
+        };
     }
 
     fn calc_alpha(sample_rate: f32, cutoff_hz: f32) -> f32 {
@@ -22,13 +52,9 @@ impl LowPass {
 
 impl Node for LowPass {
     fn apply(&self, input: SynthSource) -> SynthSource {
-        let sr = input.sample_rate() as f32;
-        let cutoff_hz = self.cutoff_hz.clamp(1.0, sr * 0.45);
-        let alpha = Self::calc_alpha(sr, cutoff_hz);
-
         Box::new(LowPassSource {
             input,
-            alpha,
+            params: self.params.clone(),
             prev_y: 0.0,
         })
     }
@@ -40,7 +66,7 @@ impl Node for LowPass {
 
 struct LowPassSource {
     input: SynthSource,
-    alpha: f32,
+    params: Arc<RwLock<LowPassParams>>,
     prev_y: f32,
 }
 
@@ -49,10 +75,11 @@ impl Iterator for LowPassSource {
 
     fn next(&mut self) -> Option<f32> {
         let x = self.input.next()?;
-
-        let y = self.alpha * x + (1.0 - self.alpha) * self.prev_y;
+        let sr = self.input.sample_rate() as f32;
+        let cutoff = self.params.read().unwrap().cutoff_hz;
+        let alpha = LowPass::calc_alpha(sr, cutoff);
+        let y = alpha * x + (1.0 - alpha) * self.prev_y;
         self.prev_y = y;
-
         Some(y)
     }
 }

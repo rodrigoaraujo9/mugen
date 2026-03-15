@@ -2,7 +2,7 @@ use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
 };
-use synth_rs::{audio::get_handle, play::run::run_audio, ui::run_ui};
+use synth_rs::{audio::get_handle, play::run::runtime, ui::run_ui};
 use tokio::sync::watch;
 
 #[tokio::main]
@@ -26,7 +26,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    let audio = run_audio(shutdown_rx, focused.clone());
+    let audio = runtime(shutdown_rx, focused.clone());
 
     tokio::select! {
         _ = tokio::signal::ctrl_c() => {

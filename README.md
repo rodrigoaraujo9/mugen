@@ -7,7 +7,7 @@
 
 <div align="center">
     <img src="./assets/demo.gif" alt="Demo">
-</div> 
+</div>
 
 ## About
 
@@ -20,9 +20,11 @@ Right now it focuses on:
 - real-time sound generation
 - polyphonic playing
 - switching sound character while notes are held
-- adsr manipulation (hardcoded to amp)
+- dynamic patch architecture with interchangeable generators and nodes
+- adsr manipulation (hardcoded to amp, applied per note)
 - dynamic LFO manipulation supporting any kind of wave and any kind of application (amp for now)
 - LPF manipulation (low pass filter), still no UI support
+- real-time parameter changes without rebuilding the patch
 - displaying in real time which keys are being played
 
 ## Available waveforms
@@ -46,8 +48,9 @@ You can rotate between them while playing.
 
 - **Generator** → produces sound (sine, saw, etc.)
 - **Node** → changes sound (filters, effects, modulation)
-- **PatchSource** → generator + chain of nodes
-- The synth just plays the current patch for each key you press
+- **Patch** → owns one generator and a dynamic chain of nodes
+- Runtime state keeps live shared parameters so effects can change while notes are playing
+- ADSR is applied per note after the patch chain
 
 ## Screenshot
 

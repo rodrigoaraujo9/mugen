@@ -4,11 +4,11 @@ use std::f32::consts::TAU;
 #[derive(Clone)]
 pub struct LfoOsc {
     kind: BasicKind,
-    phase: f32,   // [0, 1) lfo position inside cycle
-    rate_hz: f32, // cycles per second
+    phase: f32,
+    rate_hz: f32,
     sample_rate: u32,
-    phase_inc: f32, // rate_hz / sr
-    rng: u64,       // only used for Noise
+    phase_inc: f32,
+    rng: u64,
 }
 
 impl LfoOsc {
@@ -25,13 +25,11 @@ impl LfoOsc {
         s
     }
 
-    #[inline]
     fn recalc(&mut self) {
         let sr_f = self.sample_rate.max(1) as f32;
         self.phase_inc = self.rate_hz.max(0.0) / sr_f;
     }
 
-    #[inline]
     pub fn sync_sr(&mut self, sr: u32) {
         let sr = sr.max(1);
         if sr != self.sample_rate {
@@ -40,8 +38,6 @@ impl LfoOsc {
         }
     }
 
-    /// update rate without recreating the oscillator
-    #[inline]
     pub fn set_rate_hz(&mut self, rate_hz: f32) {
         let r = rate_hz.max(0.0);
         if (r - self.rate_hz).abs() > f32::EPSILON {
@@ -50,13 +46,10 @@ impl LfoOsc {
         }
     }
 
-    /// change waveform without recreating
-    #[inline]
     pub fn set_kind(&mut self, kind: BasicKind) {
         self.kind = kind;
     }
 
-    #[inline]
     fn step_phase(&mut self) -> f32 {
         let p = self.phase;
         self.phase += self.phase_inc;
@@ -66,7 +59,6 @@ impl LfoOsc {
         p
     }
 
-    #[inline]
     fn next_noise(&mut self) -> f32 {
         let mut x = self.rng;
         x ^= x >> 12;
@@ -74,14 +66,11 @@ impl LfoOsc {
         x ^= x >> 27;
         self.rng = x;
         let y = x.wrapping_mul(0x2545F4914F6CDD1D);
-
         let u = (y >> 40) as u32;
         let f = u as f32 / ((1u32 << 24) as f32);
         2.0 * f - 1.0
     }
 
-    /// returns LFO value in [-1, +1]
-    #[inline]
     pub fn next_value(&mut self) -> f32 {
         match self.kind {
             BasicKind::Sine => (TAU * self.step_phase()).sin(),

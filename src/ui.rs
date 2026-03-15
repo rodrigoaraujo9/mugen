@@ -34,10 +34,10 @@ use tokio::sync::{mpsc, watch};
 use tokio::time::sleep;
 
 use crate::audio::AudioHandle;
-use crate::generators::basic::{BasicKind, basic_generator};
+use crate::generators::basic::BasicKind;
 use crate::nodes::adsr::Adsr;
-use crate::nodes::lfo_amp::LfoAmp;
-use crate::nodes::lowpass::LowPass;
+use crate::nodes::lfo_amp::LfoAmpParams;
+use crate::nodes::lowpass::LowPassParams;
 
 #[allow(dead_code)]
 mod kdr {
@@ -179,10 +179,10 @@ struct UiState {
     mod_tab: ModTab,
 
     lfo_param_idx: usize,
-    lfo: LfoAmp,
+    lfo: LfoAmpParams,
 
     lowpass_param_idx: usize,
-    lowpass: LowPass,
+    lowpass: LowPassParams,
 
     patch_name: String,
     muted: bool,
@@ -193,8 +193,15 @@ struct UiState {
 
 impl UiState {
     fn new(initial_adsr: Adsr) -> Self {
-        let initial_lfo = LfoAmp::new(BasicKind::Sine, 5.0, 0.0);
-        let initial_lowpass = LowPass::new(20_000.0);
+        let initial_lfo = LfoAmpParams {
+            kind: BasicKind::Sine,
+            rate_hz: 5.0,
+            depth: 0.0,
+            base_gain: 1.0,
+        };
+        let initial_lowpass = LowPassParams {
+            cutoff_hz: 20_000.0,
+        };
 
         Self {
             focus: FocusPane::Waveforms,
@@ -239,6 +246,16 @@ impl UiState {
 
     fn selected_lowpass_param(&self) -> LowPassParam {
         LowPassParam::all()[self.lowpass_param_idx]
+    }
+
+    fn sync_waveform_idx_from_patch_name(&mut self) {
+        if let Some(i) = self
+            .waveforms
+            .iter()
+            .position(|k| k.name() == self.patch_name.as_str())
+        {
+            self.waveform_idx = i;
+        }
     }
 }
 
@@ -312,6 +329,7 @@ pub async fn run_ui(
                 ui.adsr = s.adsr;
                 ui.lfo = s.lfo;
                 ui.lowpass = s.lowpass;
+                ui.sync_waveform_idx_from_patch_name();
             }
 
             _ = held_keys_rx.changed() => {
@@ -362,7 +380,7 @@ pub async fn run_ui(
 
                         if changed {
                             let kind = ui.selected_waveform();
-                            handle.set_patch(basic_generator(kind));
+                            handle.set_generator_kind(kind);
                         }
                     }
 
@@ -425,7 +443,7 @@ pub async fn run_ui(
                             KeyCode::Left => match ui.mod_tab {
                                 ModTab::Lfo => {
                                     tweak_lfo(&mut ui, -1);
-                                    handle.set_lfoamp(ui.lfo);
+                                    handle.set_lfo(ui.lfo);
                                 }
                                 ModTab::LowPass => {
                                     tweak_lowpass(&mut ui, -1);
@@ -436,7 +454,7 @@ pub async fn run_ui(
                             KeyCode::Right => match ui.mod_tab {
                                 ModTab::Lfo => {
                                     tweak_lfo(&mut ui, 1);
-                                    handle.set_lfoamp(ui.lfo);
+                                    handle.set_lfo(ui.lfo);
                                 }
                                 ModTab::LowPass => {
                                     tweak_lowpass(&mut ui, 1);

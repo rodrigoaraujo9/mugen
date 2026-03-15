@@ -11,7 +11,6 @@ use device_query::Keycode;
 use std::collections::HashSet;
 use tokio::sync::{Mutex, OnceCell, mpsc, watch};
 
-/// internal singleton state
 pub struct AudioSystem {
     pub handle: AudioHandle,
     pub cmd_rx: Mutex<Option<mpsc::UnboundedReceiver<AudioCommand>>>,
@@ -27,15 +26,17 @@ pub async fn get_handle() -> &'static AudioHandle {
             let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
 
             let initial_adsr = Adsr::new(ADSR_ATTACK_S, ADSR_DECAY_S, ADSR_SUSTAIN, ADSR_RELEASE_S);
+
             let initial_lfo = LfoAmp::new(LFO_KIND, LFO_RATE_HZ, LFO_DEPTH);
+            let initial_lowpass = LowPass::new(CUTOFF);
 
             let initial = AudioSnapshot {
                 volume: 1.0,
                 muted: false,
                 patch_name: "Sine".to_string(),
                 adsr: initial_adsr,
-                lfo: initial_lfo,
-                lowpass: LowPass::new(CUTOFF),
+                lfo: initial_lfo.params(),
+                lowpass: initial_lowpass.params(),
             };
 
             let (snapshot_tx, snapshot_rx) = watch::channel(initial);
