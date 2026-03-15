@@ -2,30 +2,31 @@
 <div align="center">
   <h3 align="center">mugen</h3>
   <p align="center">
-      A terminal-based synth in Rust.  </p>
+    A terminal-based synthesizer in Rust.
+  </p>
 </div>
 
 <div align="center">
-    <img src="./assets/demo.gif" alt="Demo">
+  <img src="./assets/demo.gif" alt="Demo">
 </div>
 
 ## About
 
 This is a passion project to learn more about how synthesizers used in music composition and production work (mathematically) as well as dive into real-time systems in Rust. Synthesisers do a lot of compute and require that there is no noticeble latency from when keys are pressed or released to when the sound is played or stops. Therefore I am finding this quite a nice challenge!
 
-You can play it live from your computer keyboard, switch waveforms as you go, mess with effects and layer notes like a real instrument. You can also create new wave sources and effects and mix them up easily.
+You can play it live from your computer keyboard, layer notes, switch waveforms while holding notes, and tweak parameters in real time without rebuilding the modulation chain.
 
 Right now it focuses on:
 
 - real-time sound generation
-- polyphonic playing
-- switching sound character while notes are held
+- polyphonic playback
+- live waveform switching while notes are held
 - dynamic patch architecture with interchangeable generators and nodes
-- adsr manipulation (hardcoded to amp, applied per note)
-- dynamic LFO manipulation supporting any kind of wave and any kind of application (amp for now)
-- LPF manipulation (low pass filter), still no UI support
-- real-time parameter changes without rebuilding the patch
-- displaying in real time which keys are being played
+- per-note ADSR amplitude envelopes
+- live LFO control
+- live low-pass filter control
+- real-time parameter changes while audio is running
+- real-time display of held keys
 
 ## Available waveforms
 
@@ -35,24 +36,24 @@ Right now it focuses on:
 - **Triangle**
 - **Noise**
 
-You can rotate between them while playing.
-
 ## How to play
 
-- Use the keyboard (A–L row + W/E/T/Y/U/O/P) like a small piano
+- Use the keyboard (`A–L` row + `W/E/T/Y/U/O/P`) like a small piano
 - Hold multiple keys to play chords
-- Use **TAB** and arrow buttons to navigate and play around with values
+- Use **Tab** to switch panels
+- Use **arrow keys** to select and change parameters
+- Use **Space** to switch between **LFO** and **LowPass** in the modulation panel
 - Press **Q** or **Ctrl+C** to quit
 
 ## Architecture
 
-- **Generator** → produces sound (sine, saw, etc.)
-- **Node** → changes sound (filters, effects, modulation)
+- **Generator** → produces the raw source signal
+- **Node** → transforms the signal (modulation, filtering, effects)
 - **Patch** → owns one generator and a dynamic chain of nodes
-- Runtime state keeps live shared parameters so effects can change while notes are playing
-- ADSR is applied per note after the patch chain
+- Generator and node parameters are shared live so the UI can update them while notes are playing
+- ADSR is applied per note, after the patch chain
 
-## Screenshot
+## Screenshots
 
 ![Intro](assets/intro.png)
 ![UI](assets/ui.png)
