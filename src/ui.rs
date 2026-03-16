@@ -31,11 +31,11 @@ use ratatui::{
 use tokio::sync::{mpsc, watch};
 use tokio::time::sleep;
 
-use crate::Effects::adsr::Adsr;
-use crate::Effects::lfo_amp::LfoAmp;
-use crate::Effects::lowpass::LowPass;
-use crate::Oscilators::basic::Wave;
 use crate::audio::{Client, Snapshot};
+use crate::effects::adsr::Adsr;
+use crate::effects::lfo_amp::LfoAmp;
+use crate::effects::lowpass::LowPass;
+use crate::oscilators::basic::Wave;
 
 #[allow(dead_code)]
 mod kdr {

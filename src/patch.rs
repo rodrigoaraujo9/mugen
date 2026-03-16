@@ -4,8 +4,8 @@ use rodio::Source;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
-use crate::Effects::adsr::{Adsr, AdsrHandle, adsr};
-use crate::Oscilators::basic::{OscHandle, Wave, osc_source};
+use crate::effects::adsr::{Adsr, AdsrHandle, adsr};
+use crate::oscilators::basic::{OscHandle, Wave, osc_source};
 
 pub type Sample = f32;
 pub type PatchSource = Box<dyn Source<Item = Sample> + Send>;
