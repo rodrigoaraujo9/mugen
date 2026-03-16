@@ -2,12 +2,12 @@ use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
 };
-use synth_rs::{audio::get_handle, play::run::runtime, ui::run_ui};
+use synth_rs::{audio::client, play::run::run, ui::run_ui};
 use tokio::sync::watch;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let handle = get_handle().await.clone();
+    let audio = client().await.clone();
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
 
     let focused = Arc::new(AtomicBool::new(true));
@@ -15,18 +15,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let ui = {
         let shutdown_tx = shutdown_tx.clone();
-        let handle = handle.clone();
+        let audio = audio.clone();
         let focused = focused.clone();
 
         async move {
-            let res = run_ui(handle, shutdown_tx.clone(), focused).await;
+            let res = run_ui(audio, shutdown_tx.clone(), focused).await;
             let _ = shutdown_tx.send(true);
 
             res
         }
     };
 
-    let audio = runtime(shutdown_rx, focused.clone());
+    let audio = run(shutdown_rx, focused.clone());
 
     tokio::select! {
         _ = tokio::signal::ctrl_c() => {

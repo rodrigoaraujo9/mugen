@@ -31,8 +31,9 @@ use ratatui::{
 use tokio::sync::{mpsc, watch};
 use tokio::time::sleep;
 
-use crate::audio::AudioHandle;
-use crate::generators::basic::BasicKind;
+use crate::audio::AudioClient;
+use crate::audio::AudioSnapshot;
+use crate::generators::basic::Wave;
 use crate::nodes::adsr::Adsr;
 use crate::nodes::lfo_amp::LfoAmpParams;
 use crate::nodes::lowpass::LowPassParams;
@@ -153,7 +154,7 @@ impl LowPassParam {
 struct UiState {
     focus: FocusPane,
 
-    waveforms: [BasicKind; 5],
+    waveforms: [Wave; 5],
     waveform_idx: usize,
 
     adsr_param_idx: usize,
@@ -168,6 +169,7 @@ struct UiState {
     lowpass: LowPassParams,
 
     patch_name: String,
+    generator_kind: Wave,
     muted: bool,
     volume: f32,
     held_keys: HashSet<Keycode>,
@@ -175,45 +177,46 @@ struct UiState {
 }
 
 impl UiState {
-    fn new(initial_adsr: Adsr) -> Self {
+    fn new(snapshot: AudioSnapshot) -> Self {
+        let waveforms = [
+            Wave::Sine,
+            Wave::Saw,
+            Wave::Square,
+            Wave::Triangle,
+            Wave::Noise,
+        ];
+
+        let waveform_idx = waveforms
+            .iter()
+            .position(|k| *k == snapshot.wave_kind)
+            .unwrap_or(0);
+
         Self {
             focus: FocusPane::Waveforms,
-            waveforms: [
-                BasicKind::Sine,
-                BasicKind::Saw,
-                BasicKind::Square,
-                BasicKind::Triangle,
-                BasicKind::Noise,
-            ],
-            waveform_idx: 0,
+            waveforms,
+            waveform_idx,
 
             adsr_param_idx: 0,
-            adsr: initial_adsr,
+            adsr: snapshot.adsr,
 
             mod_tab: ModTab::Lfo,
             lfo_param_idx: 0,
-            lfo: LfoAmpParams {
-                kind: BasicKind::Sine,
-                rate_hz: 5.0,
-                depth: 0.0,
-                base_gain: 1.0,
-            },
+            lfo: snapshot.lfo,
 
             lowpass_param_idx: 0,
-            lowpass: LowPassParams {
-                cutoff_hz: 20_000.0,
-            },
+            lowpass: snapshot.lowpass,
 
-            patch_name: "Sine".to_string(),
-            muted: false,
-            volume: 1.0,
+            patch_name: snapshot.patch_name,
+            generator_kind: snapshot.wave_kind,
+            muted: snapshot.muted,
+            volume: snapshot.volume,
             held_keys: HashSet::new(),
             octave_offset: 0,
         }
     }
 
     #[inline]
-    fn selected_waveform(&self) -> BasicKind {
+    fn selected_waveform(&self) -> Wave {
         self.waveforms[self.waveform_idx]
     }
 
@@ -227,16 +230,16 @@ impl UiState {
         LfoParam::ALL[self.lfo_param_idx]
     }
 
-    // #[inline]
-    // fn selected_lowpass_param(&self) -> LowPassParam {
-    //     LowPassParam::ALL[self.lowpass_param_idx]
-    // }
+    #[inline]
+    fn selected_lowpass_param(&self) -> LowPassParam {
+        LowPassParam::ALL[self.lowpass_param_idx]
+    }
 
-    fn sync_waveform_idx_from_patch_name(&mut self) {
+    fn sync_waveform_idx(&mut self) {
         if let Some(i) = self
             .waveforms
             .iter()
-            .position(|kind| kind.name() == self.patch_name)
+            .position(|kind| *kind == self.generator_kind)
         {
             self.waveform_idx = i;
         }
@@ -244,7 +247,7 @@ impl UiState {
 }
 
 pub async fn run_ui(
-    handle: AudioHandle,
+    handle: AudioClient,
     shutdown_tx: watch::Sender<bool>,
     focused: Arc<AtomicBool>,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -257,6 +260,9 @@ pub async fn run_ui(
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
     terminal.clear()?;
+
+    let initial = handle.subscribe().borrow().clone();
+    let mut ui = UiState::new(initial);
 
     let (key_tx, mut key_rx) = mpsc::unbounded_channel::<KeyEvent>();
 
@@ -272,7 +278,7 @@ pub async fn run_ui(
 
             match event::read() {
                 Ok(Event::Key(k))
-                    if matches!(k.kind, KeyEventKind::Press | KeyEventKind::Release) =>
+                    if matches!(k.kind, KeyEventKind::Press | KeyEventKind::Repeat) =>
                 {
                     let _ = key_tx.send(k);
                 }
@@ -289,7 +295,6 @@ pub async fn run_ui(
 
     let mut snap_rx = handle.subscribe();
     let mut held_keys_rx = handle.subscribe_held_keys();
-    let mut ui = UiState::new(Adsr::new(0.01, 0.10, 0.70, 0.25));
 
     let intro_start = Instant::now();
     let mut show_intro = true;
@@ -309,12 +314,13 @@ pub async fn run_ui(
             _ = snap_rx.changed() => {
                 let s = snap_rx.borrow().clone();
                 ui.patch_name = s.patch_name;
+                ui.generator_kind = s.wave_kind;
                 ui.muted = s.muted;
                 ui.volume = s.volume;
                 ui.adsr = s.adsr;
                 ui.lfo = s.lfo;
                 ui.lowpass = s.lowpass;
-                ui.sync_waveform_idx_from_patch_name();
+                ui.sync_waveform_idx();
             }
 
             _ = held_keys_rx.changed() => {
@@ -360,7 +366,7 @@ fn should_quit(k: KeyEvent) -> bool {
         || matches!(k.code, KeyCode::Char('q'))
 }
 
-fn handle_waveforms(ui: &mut UiState, handle: &AudioHandle, k: KeyEvent) {
+fn handle_waveforms(ui: &mut UiState, handle: &AudioClient, k: KeyEvent) {
     let prev = ui.waveform_idx;
 
     match k.code {
@@ -374,7 +380,7 @@ fn handle_waveforms(ui: &mut UiState, handle: &AudioHandle, k: KeyEvent) {
     }
 }
 
-fn handle_adsr(ui: &mut UiState, handle: &AudioHandle, k: KeyEvent) {
+fn handle_adsr(ui: &mut UiState, handle: &AudioClient, k: KeyEvent) {
     match k.code {
         KeyCode::Up if ui.adsr_param_idx > 0 => ui.adsr_param_idx -= 1,
         KeyCode::Down if ui.adsr_param_idx + 1 < AdsrParam::ALL.len() => ui.adsr_param_idx += 1,
@@ -390,7 +396,7 @@ fn handle_adsr(ui: &mut UiState, handle: &AudioHandle, k: KeyEvent) {
     }
 }
 
-fn handle_mod(ui: &mut UiState, handle: &AudioHandle, k: KeyEvent) {
+fn handle_mod(ui: &mut UiState, handle: &AudioClient, k: KeyEvent) {
     match k.code {
         KeyCode::Char(' ') => ui.mod_tab = ui.mod_tab.next(),
 
@@ -434,7 +440,7 @@ fn handle_mod(ui: &mut UiState, handle: &AudioHandle, k: KeyEvent) {
     }
 }
 
-fn handle_bottom(ui: &mut UiState, handle: &AudioHandle, k: KeyEvent) {
+fn handle_bottom(ui: &mut UiState, handle: &AudioClient, k: KeyEvent) {
     match k.code {
         KeyCode::Right if ui.octave_offset < 4 => {
             ui.octave_offset += 1;
@@ -449,11 +455,7 @@ fn handle_bottom(ui: &mut UiState, handle: &AudioHandle, k: KeyEvent) {
 }
 
 fn tweak_adsr(ui: &mut UiState, dir: i32) {
-    let step = match ui.selected_adsr_param() {
-        AdsrParam::Sustain => 0.01,
-        _ => 0.01,
-    };
-
+    let step = 0.01;
     let delta = if dir < 0 { -step } else { step };
 
     match ui.selected_adsr_param() {
@@ -480,28 +482,33 @@ fn tweak_lfo(ui: &mut UiState, dir: i32) {
 
 fn tweak_lowpass(ui: &mut UiState, dir: i32) {
     let dir = if dir < 0 { -1.0 } else { 1.0 };
-    let cutoff = ui.lowpass.cutoff_hz;
 
-    let step = if cutoff < 100.0 {
-        5.0
-    } else if cutoff < 1000.0 {
-        25.0
-    } else if cutoff < 5000.0 {
-        100.0
-    } else {
-        250.0
-    };
+    match ui.selected_lowpass_param() {
+        LowPassParam::CutoffHz => {
+            let cutoff = ui.lowpass.cutoff_hz;
 
-    ui.lowpass.cutoff_hz = (cutoff + dir * step).clamp(20.0, 20_000.0);
+            let step = if cutoff < 100.0 {
+                5.0
+            } else if cutoff < 1000.0 {
+                25.0
+            } else if cutoff < 5000.0 {
+                100.0
+            } else {
+                250.0
+            };
+
+            ui.lowpass.cutoff_hz = (cutoff + dir * step).clamp(20.0, 20_000.0);
+        }
+    }
 }
 
-fn next_basic_kind(kind: BasicKind, dir: i32) -> BasicKind {
-    const ALL: [BasicKind; 5] = [
-        BasicKind::Sine,
-        BasicKind::Saw,
-        BasicKind::Square,
-        BasicKind::Triangle,
-        BasicKind::Noise,
+fn next_basic_kind(kind: Wave, dir: i32) -> Wave {
+    const ALL: [Wave; 5] = [
+        Wave::Sine,
+        Wave::Saw,
+        Wave::Square,
+        Wave::Triangle,
+        Wave::Noise,
     ];
 
     let idx = ALL.iter().position(|x| *x == kind).unwrap_or(0) as i32;
@@ -992,11 +999,6 @@ fn draw_bottom(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
     let used_w = white_w * n_white;
     let x0 = bounds.x as usize + (total_w.saturating_sub(used_w)) / 2;
 
-    let white_h = total_h;
-    let black_h = ((white_h * 60) / 100).max(2);
-    let black_w = ((white_w * 55) / 100).max(2);
-
-    let bg = Style::default().bg(kdr::BG0);
     let white_bg = if focused { kdr::FG } else { kdr::BORDER };
     let white_fill = Style::default().bg(white_bg).fg(kdr::BG0);
     let orange_fill = Style::default().bg(kdr::ORANGE).fg(kdr::BG0);
@@ -1013,7 +1015,7 @@ fn draw_bottom(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
         bounds.y,
         bounds.width,
         bounds.height,
-        bg,
+        Style::default().bg(kdr::BG0),
     );
 
     for (i, wk) in white_keys.iter().enumerate() {
@@ -1063,6 +1065,9 @@ fn draw_bottom(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
                 .set_style(st);
         }
     }
+
+    let black_h = ((total_h * 60) / 100).max(2);
+    let black_w = ((white_w * 55) / 100).max(2);
 
     for bk in &black_keys {
         let center_x = x0 + (bk.gap_after + 1) * white_w;

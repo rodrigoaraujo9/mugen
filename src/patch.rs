@@ -1,77 +1,82 @@
 use rodio::Source;
+use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, RwLock};
 
-pub type SynthSource = Box<dyn Source<Item = f32> + Send>;
+use crate::generators::basic::{OscParamsHandle, osc};
+use crate::nodes::adsr::AdsrHandle;
+use crate::nodes::gain::gain;
+use crate::nodes::lfo_amp::{LfoAmpHandle, lfo_amp};
+use crate::nodes::lowpass::{LowPassHandle, lowpass};
+
+pub type Sample = f32;
+pub type SynthSource = Box<dyn Source<Item = Sample> + Send>;
 pub type Gate = Arc<AtomicBool>;
-pub type SharedGenerator = Arc<dyn Generator>;
-pub type SharedNode = Arc<dyn Node>;
 
-pub trait Node: Send + Sync {
-    fn apply(&self, input: SynthSource) -> SynthSource;
-    fn name(&self) -> &'static str;
-}
-
-pub trait Generator: Send + Sync {
-    fn create(&self, frequency: f32) -> SynthSource;
-    fn name(&self) -> &'static str;
-}
-
+#[derive(Clone)]
 pub struct Patch {
-    generator: SharedGenerator,
-    nodes: RwLock<Vec<SharedNode>>,
+    pub osc: OscParamsHandle,
+    pub adsr: AdsrHandle,
+    pub lfo: LfoAmpHandle,
+    pub lowpass: LowPassHandle,
 }
 
 impl Patch {
-    pub fn new(generator: SharedGenerator) -> Self {
+    pub fn new(
+        osc: OscParamsHandle,
+        adsr: AdsrHandle,
+        lfo: LfoAmpHandle,
+        lowpass: LowPassHandle,
+    ) -> Self {
         Self {
-            generator,
-            nodes: RwLock::new(Vec::new()),
+            osc,
+            adsr,
+            lfo,
+            lowpass,
         }
     }
 
     #[inline]
-    pub fn generator(&self) -> SharedGenerator {
-        self.generator.clone()
+    pub fn voice(&self, frequency: f32, gate: Gate) -> SynthSource {
+        osc(frequency, self.osc.clone())
+            .lfo_amp(self.lfo.clone())
+            .lowpass(self.lowpass.clone())
+            .adsr(self.adsr.clone(), gate)
     }
 
     #[inline]
-    pub fn nodes(&self) -> Vec<SharedNode> {
-        self.nodes.read().unwrap().clone()
-    }
-
-    pub fn set_nodes(&self, nodes: Vec<SharedNode>) {
-        *self.nodes.write().unwrap() = nodes;
-    }
-
-    pub fn push_node(&self, node: SharedNode) {
-        self.nodes.write().unwrap().push(node);
-    }
-
-    pub fn replace_node(&self, index: usize, node: SharedNode) -> bool {
-        let mut nodes = self.nodes.write().unwrap();
-        if let Some(slot) = nodes.get_mut(index) {
-            *slot = node;
-            true
-        } else {
-            false
-        }
-    }
-
-    pub fn clear_nodes(&self) {
-        self.nodes.write().unwrap().clear();
-    }
-
-    pub fn create(&self, frequency: f32) -> SynthSource {
-        let mut src = self.generator.create(frequency);
-        for node in self.nodes.read().unwrap().iter().cloned() {
-            src = node.apply(src);
-        }
-        src
-    }
-
-    #[inline]
-    pub fn name(&self) -> &'static str {
-        self.generator.name()
+    pub fn name(&self) -> String {
+        self.osc.get().kind.name().to_string()
     }
 }
+
+pub trait SourceChain: Sized
+where
+    Self: Source<Item = f32> + Send + 'static,
+{
+    #[inline]
+    fn boxed(self) -> SynthSource {
+        Box::new(self)
+    }
+
+    #[inline]
+    fn lfo_amp(self, params: LfoAmpHandle) -> SynthSource {
+        lfo_amp(Box::new(self), params)
+    }
+
+    #[inline]
+    fn lowpass(self, params: LowPassHandle) -> SynthSource {
+        lowpass(Box::new(self), params)
+    }
+
+    #[inline]
+    fn adsr(self, adsr: AdsrHandle, gate: Gate) -> SynthSource {
+        crate::nodes::adsr::adsr(Box::new(self), adsr, gate)
+    }
+
+    #[inline]
+    fn gain(self, params: crate::nodes::gain::GainHandle) -> SynthSource {
+        gain(Box::new(self), params)
+    }
+}
+
+impl<T> SourceChain for T where T: Source<Item = f32> + Send + 'static {}

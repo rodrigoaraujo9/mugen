@@ -1,5 +1,5 @@
 use super::types::{AudioCommand, AudioSnapshot};
-use crate::generators::basic::BasicKind;
+use crate::generators::basic::Wave;
 use crate::nodes::adsr::Adsr;
 use crate::nodes::lfo_amp::LfoAmpParams;
 use crate::nodes::lowpass::LowPassParams;
@@ -8,13 +8,13 @@ use std::collections::HashSet;
 use tokio::sync::{mpsc, watch};
 
 #[derive(Clone)]
-pub struct AudioHandle {
+pub struct AudioClient {
     pub(crate) tx: mpsc::UnboundedSender<AudioCommand>,
     pub(crate) snapshot_rx: watch::Receiver<AudioSnapshot>,
     pub(crate) held_keys_rx: watch::Receiver<HashSet<Keycode>>,
 }
 
-impl AudioHandle {
+impl AudioClient {
     #[inline]
     fn send(&self, cmd: AudioCommand) {
         let _ = self.tx.send(cmd);
@@ -28,7 +28,7 @@ impl AudioHandle {
         self.send(AudioCommand::SetMuted(muted));
     }
 
-    pub fn set_generator_kind(&self, kind: BasicKind) {
+    pub fn set_generator_kind(&self, kind: Wave) {
         self.send(AudioCommand::SetGeneratorKind(kind));
     }
 

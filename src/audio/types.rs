@@ -1,4 +1,4 @@
-use crate::generators::basic::BasicKind;
+use crate::generators::basic::Wave;
 use crate::nodes::adsr::Adsr;
 use crate::nodes::lfo_amp::LfoAmpParams;
 use crate::nodes::lowpass::LowPassParams;
@@ -7,7 +7,7 @@ use crate::nodes::lowpass::LowPassParams;
 pub struct AudioSnapshot {
     pub volume: f32,
     pub muted: bool,
-    pub generator_kind: BasicKind,
+    pub wave_kind: Wave,
     pub patch_name: String,
     pub adsr: Adsr,
     pub lfo: LfoAmpParams,
@@ -17,7 +17,7 @@ pub struct AudioSnapshot {
 pub enum AudioCommand {
     SetVolume(f32),
     SetMuted(bool),
-    SetGeneratorKind(BasicKind),
+    SetGeneratorKind(Wave),
     SetAdsr(Adsr),
     SetOctave(i32),
     SetLfo(LfoAmpParams),

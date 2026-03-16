@@ -1,12 +1,12 @@
 use crate::config::{AMP_DEFAULT, SAMPLE_RATE};
-use crate::patch::{Generator, SynthSource};
+use crate::patch::Sample;
+use crate::shared::Shared;
 use rodio::Source;
 use std::f32::consts::TAU;
-use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BasicKind {
+pub enum Wave {
     Sine,
     Saw,
     Square,
@@ -14,7 +14,7 @@ pub enum BasicKind {
     Noise,
 }
 
-impl BasicKind {
+impl Wave {
     #[inline]
     pub fn toggle(self) -> Self {
         match self {
@@ -39,87 +39,46 @@ impl BasicKind {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct BasicGeneratorParams {
-    pub kind: BasicKind,
+pub struct OscParams {
+    pub kind: Wave,
     pub amplitude: f32,
     pub sample_rate: u32,
 }
 
-impl Default for BasicGeneratorParams {
+impl Default for OscParams {
     fn default() -> Self {
         Self {
-            kind: BasicKind::Sine,
+            kind: Wave::Sine,
             amplitude: AMP_DEFAULT,
             sample_rate: SAMPLE_RATE,
         }
     }
 }
 
-type SharedParams = Arc<RwLock<BasicGeneratorParams>>;
+pub type OscParamsHandle = Shared<OscParams>;
 
-pub fn basic_generator(kind: BasicKind) -> Arc<BasicGenerator> {
-    Arc::new(BasicGenerator::new(kind))
+#[inline]
+pub fn osc_params(kind: Wave) -> OscParamsHandle {
+    Shared::new(OscParams {
+        kind,
+        ..OscParams::default()
+    })
 }
 
-pub struct BasicGenerator {
-    params: SharedParams,
+#[inline]
+pub fn osc(frequency: f32, params: OscParamsHandle) -> OscSource {
+    OscSource::new(frequency, params)
 }
 
-impl BasicGenerator {
-    pub fn new(kind: BasicKind) -> Self {
-        Self::from_params(BasicGeneratorParams {
-            kind,
-            ..BasicGeneratorParams::default()
-        })
-    }
-
-    pub fn from_params(params: BasicGeneratorParams) -> Self {
-        Self {
-            params: Arc::new(RwLock::new(BasicGeneratorParams {
-                kind: params.kind,
-                amplitude: params.amplitude.max(0.0),
-                sample_rate: params.sample_rate.max(1),
-            })),
-        }
-    }
-
-    #[inline]
-    pub fn params(&self) -> BasicGeneratorParams {
-        *self.params.read().unwrap()
-    }
-
-    pub fn set_kind(&self, kind: BasicKind) {
-        self.params.write().unwrap().kind = kind;
-    }
-
-    pub fn set_amplitude(&self, amplitude: f32) {
-        self.params.write().unwrap().amplitude = amplitude.max(0.0);
-    }
-
-    pub fn set_sample_rate(&self, sample_rate: u32) {
-        self.params.write().unwrap().sample_rate = sample_rate.max(1);
-    }
-}
-
-impl Generator for BasicGenerator {
-    fn create(&self, frequency: f32) -> SynthSource {
-        Box::new(BasicSource::new(self.params.clone(), frequency))
-    }
-
-    fn name(&self) -> &'static str {
-        self.params().kind.name()
-    }
-}
-
-struct BasicSource {
-    params: SharedParams,
+pub struct OscSource {
+    params: OscParamsHandle,
     frequency: f32,
     phase: f32,
     rng: u64,
 }
 
-impl BasicSource {
-    fn new(params: SharedParams, frequency: f32) -> Self {
+impl OscSource {
+    pub fn new(frequency: f32, params: OscParamsHandle) -> Self {
         Self {
             params,
             frequency: frequency.max(0.0),
@@ -128,19 +87,20 @@ impl BasicSource {
         }
     }
 
-    fn live_sample_rate(&self) -> u32 {
-        self.params.read().unwrap().sample_rate.max(1)
+    #[inline]
+    fn sample_rate_live(&self) -> u32 {
+        self.params.get().sample_rate.max(1)
     }
 
     fn step_phase(&mut self) -> f32 {
-        let phase = self.phase;
-        self.phase += self.frequency / self.live_sample_rate() as f32;
+        let p = self.phase;
+        self.phase += self.frequency / self.sample_rate_live() as f32;
 
         if self.phase >= 1.0 {
             self.phase -= self.phase.floor();
         }
 
-        phase
+        p
     }
 
     fn next_noise(&mut self) -> f32 {
@@ -158,23 +118,23 @@ impl BasicSource {
     }
 }
 
-impl Iterator for BasicSource {
-    type Item = f32;
+impl Iterator for OscSource {
+    type Item = Sample;
 
-    fn next(&mut self) -> Option<f32> {
-        let params = *self.params.read().unwrap();
+    fn next(&mut self) -> Option<Self::Item> {
+        let params = self.params.get();
         let amp = params.amplitude.max(0.0);
 
         let y = match params.kind {
-            BasicKind::Sine => (TAU * self.step_phase()).sin(),
-            BasicKind::Square => {
+            Wave::Sine => (TAU * self.step_phase()).sin(),
+            Wave::Square => {
                 if self.step_phase() < 0.5 {
                     1.0
                 } else {
                     -1.0
                 }
             }
-            BasicKind::Triangle => {
+            Wave::Triangle => {
                 let p = self.step_phase();
                 if p < 0.5 {
                     -1.0 + 4.0 * p
@@ -182,15 +142,15 @@ impl Iterator for BasicSource {
                     3.0 - 4.0 * p
                 }
             }
-            BasicKind::Saw => 2.0 * self.step_phase() - 1.0,
-            BasicKind::Noise => self.next_noise(),
+            Wave::Saw => 2.0 * self.step_phase() - 1.0,
+            Wave::Noise => self.next_noise(),
         };
 
         Some(y * amp)
     }
 }
 
-impl Source for BasicSource {
+impl Source for OscSource {
     fn current_span_len(&self) -> Option<usize> {
         None
     }
@@ -200,7 +160,7 @@ impl Source for BasicSource {
     }
 
     fn sample_rate(&self) -> u32 {
-        self.live_sample_rate()
+        self.sample_rate_live()
     }
 
     fn total_duration(&self) -> Option<Duration> {

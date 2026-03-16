@@ -1,7 +1,7 @@
-use crate::patch::{Node, SynthSource};
+use crate::patch::SynthSource;
+use crate::shared::Shared;
 use rodio::Source;
 use std::f32::consts::TAU;
-use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 #[derive(Debug, Clone, Copy)]
@@ -9,79 +9,47 @@ pub struct LowPassParams {
     pub cutoff_hz: f32,
 }
 
-type SharedParams = Arc<RwLock<LowPassParams>>;
+pub type LowPassHandle = Shared<LowPassParams>;
 
-#[derive(Clone)]
-pub struct LowPass {
-    params: SharedParams,
+#[inline]
+pub fn lowpass_handle(params: LowPassParams) -> LowPassHandle {
+    Shared::new(LowPassParams {
+        cutoff_hz: params.cutoff_hz.max(1.0),
+    })
 }
 
-impl LowPass {
-    pub fn new(cutoff_hz: f32) -> Self {
-        Self::from_params(LowPassParams { cutoff_hz })
-    }
-
-    pub fn from_params(params: LowPassParams) -> Self {
-        Self {
-            params: Arc::new(RwLock::new(LowPassParams {
-                cutoff_hz: params.cutoff_hz.max(1.0),
-            })),
-        }
-    }
-
-    #[inline]
-    pub fn params(&self) -> LowPassParams {
-        *self.params.read().unwrap()
-    }
-
-    pub fn set_cutoff_hz(&self, cutoff_hz: f32) {
-        self.params.write().unwrap().cutoff_hz = cutoff_hz.max(1.0);
-    }
-
-    pub fn set_all(&self, params: LowPassParams) {
-        *self.params.write().unwrap() = LowPassParams {
-            cutoff_hz: params.cutoff_hz.max(1.0),
-        };
-    }
-
-    fn alpha(sample_rate: f32, cutoff_hz: f32) -> f32 {
-        let cutoff_hz = cutoff_hz.clamp(1.0, sample_rate * 0.45);
-        let dt = 1.0 / sample_rate;
-        let tau = 1.0 / (TAU * cutoff_hz);
-        dt / (tau + dt)
-    }
+#[inline]
+pub fn lowpass(input: SynthSource, params: LowPassHandle) -> SynthSource {
+    Box::new(LowPassSource {
+        input,
+        params,
+        prev_y: 0.0,
+    })
 }
 
-impl Node for LowPass {
-    fn apply(&self, input: SynthSource) -> SynthSource {
-        Box::new(LowPassSource {
-            input,
-            params: self.params.clone(),
-            prev_y: 0.0,
-        })
-    }
-
-    fn name(&self) -> &'static str {
-        "Low Pass"
-    }
+fn alpha(sample_rate: f32, cutoff_hz: f32) -> f32 {
+    let cutoff_hz = cutoff_hz.clamp(1.0, sample_rate * 0.45);
+    let dt = 1.0 / sample_rate;
+    let tau = 1.0 / (TAU * cutoff_hz);
+    dt / (tau + dt)
 }
 
 struct LowPassSource {
     input: SynthSource,
-    params: SharedParams,
+    params: LowPassHandle,
     prev_y: f32,
 }
 
 impl Iterator for LowPassSource {
     type Item = f32;
 
-    fn next(&mut self) -> Option<f32> {
+    fn next(&mut self) -> Option<Self::Item> {
         let x = self.input.next()?;
         let sr = self.input.sample_rate() as f32;
-        let cutoff = self.params.read().unwrap().cutoff_hz;
-        let alpha = LowPass::alpha(sr, cutoff);
+        let cutoff = self.params.get().cutoff_hz;
+        let a = alpha(sr, cutoff);
 
-        let y = alpha * x + (1.0 - alpha) * self.prev_y;
+        let y = a * x + (1.0 - a) * self.prev_y;
         self.prev_y = y;
 
         Some(y)

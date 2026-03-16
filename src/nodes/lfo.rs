@@ -1,9 +1,9 @@
-use crate::generators::basic::BasicKind;
+use crate::generators::basic::Wave;
 use std::f32::consts::TAU;
 
 #[derive(Clone)]
 pub struct LfoOsc {
-    kind: BasicKind,
+    kind: Wave,
     phase: f32,
     rate_hz: f32,
     sample_rate: u32,
@@ -12,7 +12,7 @@ pub struct LfoOsc {
 }
 
 impl LfoOsc {
-    pub fn new(kind: BasicKind, rate_hz: f32, sample_rate: u32) -> Self {
+    pub fn new(kind: Wave, rate_hz: f32, sample_rate: u32) -> Self {
         let mut osc = Self {
             kind,
             phase: 0.0,
@@ -29,12 +29,16 @@ impl LfoOsc {
         self.phase_inc = self.rate_hz.max(0.0) / self.sample_rate.max(1) as f32;
     }
 
-    pub fn sync_sr(&mut self, sample_rate: u32) {
-        let sample_rate = sample_rate.max(1);
-        if sample_rate != self.sample_rate {
-            self.sample_rate = sample_rate;
+    pub fn sync_sample_rate(&mut self, sr: u32) {
+        let sr = sr.max(1);
+        if sr != self.sample_rate {
+            self.sample_rate = sr;
             self.recalc();
         }
+    }
+
+    pub fn set_kind(&mut self, kind: Wave) {
+        self.kind = kind;
     }
 
     pub fn set_rate_hz(&mut self, rate_hz: f32) {
@@ -45,19 +49,15 @@ impl LfoOsc {
         }
     }
 
-    pub fn set_kind(&mut self, kind: BasicKind) {
-        self.kind = kind;
-    }
-
     fn step_phase(&mut self) -> f32 {
-        let phase = self.phase;
+        let p = self.phase;
         self.phase += self.phase_inc;
 
         if self.phase >= 1.0 {
             self.phase -= self.phase.floor();
         }
 
-        phase
+        p
     }
 
     fn next_noise(&mut self) -> f32 {
@@ -76,15 +76,15 @@ impl LfoOsc {
 
     pub fn next_value(&mut self) -> f32 {
         match self.kind {
-            BasicKind::Sine => (TAU * self.step_phase()).sin(),
-            BasicKind::Square => {
+            Wave::Sine => (TAU * self.step_phase()).sin(),
+            Wave::Square => {
                 if self.step_phase() < 0.5 {
                     1.0
                 } else {
                     -1.0
                 }
             }
-            BasicKind::Triangle => {
+            Wave::Triangle => {
                 let p = self.step_phase();
                 if p < 0.5 {
                     -1.0 + 4.0 * p
@@ -92,8 +92,8 @@ impl LfoOsc {
                     3.0 - 4.0 * p
                 }
             }
-            BasicKind::Saw => 2.0 * self.step_phase() - 1.0,
-            BasicKind::Noise => self.next_noise(),
+            Wave::Saw => 2.0 * self.step_phase() - 1.0,
+            Wave::Noise => self.next_noise(),
         }
     }
 }

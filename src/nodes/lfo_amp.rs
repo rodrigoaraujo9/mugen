@@ -1,114 +1,60 @@
-use crate::generators::basic::BasicKind;
+use crate::generators::basic::Wave;
 use crate::nodes::lfo::LfoOsc;
-use crate::patch::{Node, SynthSource};
+use crate::patch::SynthSource;
+use crate::shared::Shared;
 use rodio::Source;
-use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 #[derive(Debug, Clone, Copy)]
 pub struct LfoAmpParams {
-    pub kind: BasicKind,
+    pub kind: Wave,
     pub rate_hz: f32,
     pub depth: f32,
     pub base_gain: f32,
 }
 
-type SharedParams = Arc<RwLock<LfoAmpParams>>;
+pub type LfoAmpHandle = Shared<LfoAmpParams>;
 
-#[derive(Clone)]
-pub struct LfoAmp {
-    params: SharedParams,
+#[inline]
+pub fn lfo_amp_handle(params: LfoAmpParams) -> LfoAmpHandle {
+    Shared::new(LfoAmpParams {
+        kind: params.kind,
+        rate_hz: params.rate_hz.max(0.0),
+        depth: params.depth.clamp(0.0, 1.0),
+        base_gain: params.base_gain.max(0.0),
+    })
 }
 
-impl LfoAmp {
-    pub fn new(kind: BasicKind, rate_hz: f32, depth: f32) -> Self {
-        Self::from_params(LfoAmpParams {
-            kind,
-            rate_hz,
-            depth,
-            base_gain: 1.0,
-        })
-    }
+#[inline]
+pub fn lfo_amp(input: SynthSource, params: LfoAmpHandle) -> SynthSource {
+    let p = params.get();
+    let sr = input.sample_rate().max(1);
 
-    pub fn from_params(params: LfoAmpParams) -> Self {
-        Self {
-            params: Arc::new(RwLock::new(LfoAmpParams {
-                kind: params.kind,
-                rate_hz: params.rate_hz.max(0.0),
-                depth: params.depth.clamp(0.0, 1.0),
-                base_gain: params.base_gain.max(0.0),
-            })),
-        }
-    }
-
-    #[inline]
-    pub fn params(&self) -> LfoAmpParams {
-        *self.params.read().unwrap()
-    }
-
-    pub fn set_kind(&self, kind: BasicKind) {
-        self.params.write().unwrap().kind = kind;
-    }
-
-    pub fn set_rate_hz(&self, rate_hz: f32) {
-        self.params.write().unwrap().rate_hz = rate_hz.max(0.0);
-    }
-
-    pub fn set_depth(&self, depth: f32) {
-        self.params.write().unwrap().depth = depth.clamp(0.0, 1.0);
-    }
-
-    pub fn set_base_gain(&self, base_gain: f32) {
-        self.params.write().unwrap().base_gain = base_gain.max(0.0);
-    }
-
-    pub fn set_all(&self, params: LfoAmpParams) {
-        *self.params.write().unwrap() = LfoAmpParams {
-            kind: params.kind,
-            rate_hz: params.rate_hz.max(0.0),
-            depth: params.depth.clamp(0.0, 1.0),
-            base_gain: params.base_gain.max(0.0),
-        };
-    }
-}
-
-impl Node for LfoAmp {
-    fn apply(&self, input: SynthSource) -> SynthSource {
-        let params = self.params();
-        let sr = input.sample_rate().max(1);
-
-        Box::new(LfoAmpSource {
-            input,
-            lfo: LfoOsc::new(params.kind, params.rate_hz, sr),
-            params: self.params.clone(),
-        })
-    }
-
-    fn name(&self) -> &'static str {
-        "LFO Amp"
-    }
+    Box::new(LfoAmpSource {
+        input,
+        params,
+        lfo: LfoOsc::new(p.kind, p.rate_hz, sr),
+    })
 }
 
 struct LfoAmpSource {
     input: SynthSource,
+    params: LfoAmpHandle,
     lfo: LfoOsc,
-    params: SharedParams,
 }
 
 impl Iterator for LfoAmpSource {
     type Item = f32;
 
-    fn next(&mut self) -> Option<f32> {
+    fn next(&mut self) -> Option<Self::Item> {
         let x = self.input.next()?;
-        let params = *self.params.read().unwrap();
+        let p = self.params.get();
 
-        self.lfo.sync_sr(self.input.sample_rate());
-        self.lfo.set_kind(params.kind);
-        self.lfo.set_rate_hz(params.rate_hz);
+        self.lfo.sync_sample_rate(self.input.sample_rate());
+        self.lfo.set_kind(p.kind);
+        self.lfo.set_rate_hz(p.rate_hz);
 
-        let gain = params.base_gain.max(0.0)
-            * (1.0 + params.depth.clamp(0.0, 1.0) * self.lfo.next_value());
-
+        let gain = p.base_gain.max(0.0) * (1.0 + p.depth.clamp(0.0, 1.0) * self.lfo.next_value());
         Some(x * gain)
     }
 }
