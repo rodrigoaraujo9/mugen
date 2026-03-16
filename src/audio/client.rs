@@ -1,9 +1,11 @@
+//! Client API for sending commands to the audio engine and subscribing to state
+
+use crate::Effects::adsr::Adsr;
+use crate::Effects::gain::Gain;
+use crate::Effects::lfo_amp::LfoAmp;
+use crate::Effects::lowpass::LowPass;
+use crate::Oscilators::basic::Wave;
 use crate::audio::{Command, Snapshot};
-use crate::generators::basic::Wave;
-use crate::nodes::adsr::Adsr;
-use crate::nodes::gain::Gain;
-use crate::nodes::lfo_amp::LfoAmp;
-use crate::nodes::lowpass::LowPass;
 use device_query::Keycode;
 use std::collections::HashSet;
 use tokio::sync::{mpsc, watch};

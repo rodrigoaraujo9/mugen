@@ -1,3 +1,5 @@
+//! Keyboard note mapping and frequency conversion
+
 use crate::config::{A4_SEMITONES, BASE_FREQ, KEYBOARD_BASE_OCTAVE, SEMITONES_PER_OCTAVE};
 use device_query::Keycode;
 use std::fmt;

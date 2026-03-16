@@ -1,4 +1,6 @@
-use crate::patch::{Gate, SynthSource};
+//! Shapes note amplitude over time using gate-controlled stages
+
+use crate::patch::{Gate, PatchSource};
 use crate::shared::Shared;
 use rodio::Source;
 use std::sync::atomic::Ordering;
@@ -31,7 +33,7 @@ pub fn make_adsr(adsr: Adsr) -> AdsrHandle {
 }
 
 #[inline]
-pub fn adsr(input: SynthSource, adsr: AdsrHandle, gate: Gate) -> SynthSource {
+pub fn adsr(input: PatchSource, adsr: AdsrHandle, gate: Gate) -> PatchSource {
     let sr = input.sample_rate().max(1);
     Box::new(AdsrSource::new(input, adsr, gate, sr))
 }
@@ -46,7 +48,7 @@ enum Stage {
 }
 
 struct AdsrSource {
-    input: SynthSource,
+    input: PatchSource,
     adsr: AdsrHandle,
     gate: Gate,
     sample_rate: u32,
@@ -56,7 +58,7 @@ struct AdsrSource {
 }
 
 impl AdsrSource {
-    fn new(input: SynthSource, adsr: AdsrHandle, gate: Gate, sample_rate: u32) -> Self {
+    fn new(input: PatchSource, adsr: AdsrHandle, gate: Gate, sample_rate: u32) -> Self {
         Self {
             input,
             adsr,

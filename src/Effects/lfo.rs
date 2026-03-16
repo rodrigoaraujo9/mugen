@@ -1,4 +1,4 @@
-use crate::generators::basic::Wave;
+use crate::Oscilators::basic::Wave;
 use std::f32::consts::TAU;
 
 #[derive(Clone)]

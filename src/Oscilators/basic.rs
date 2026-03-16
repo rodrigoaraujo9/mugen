@@ -1,3 +1,5 @@
+//! Simple wave shapes for generator
+
 use crate::config::{AMP_DEFAULT, SAMPLE_RATE};
 use crate::patch::Sample;
 use crate::shared::Shared;

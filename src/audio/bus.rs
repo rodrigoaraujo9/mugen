@@ -1,13 +1,15 @@
+//! Shared audio bus that owns the engine channels and singleton client access
+
+use crate::Effects::adsr::Adsr;
+use crate::Effects::gain::Gain;
+use crate::Effects::lfo_amp::LfoAmp;
+use crate::Effects::lowpass::LowPass;
+use crate::Oscilators::basic::Wave;
 use crate::audio::{Client, Command, Snapshot};
 use crate::config::{
     ADSR_ATTACK_S, ADSR_DECAY_S, ADSR_RELEASE_S, ADSR_SUSTAIN, CUTOFF, LFO_DEPTH, LFO_KIND,
     LFO_RATE_HZ,
 };
-use crate::generators::basic::Wave;
-use crate::nodes::adsr::Adsr;
-use crate::nodes::gain::Gain;
-use crate::nodes::lfo_amp::LfoAmp;
-use crate::nodes::lowpass::LowPass;
 use device_query::Keycode;
 use std::collections::HashSet;
 use tokio::sync::{Mutex, OnceCell, mpsc, watch};

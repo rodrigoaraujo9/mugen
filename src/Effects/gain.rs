@@ -1,4 +1,6 @@
-use crate::patch::{Effect, SynthSource};
+//! Scales signal amplitude using shared live control
+
+use crate::patch::{Effect, PatchSource};
 use crate::shared::Shared;
 
 #[derive(Debug, Clone, Copy)]
@@ -16,7 +18,7 @@ pub fn make_gain(amount: f32) -> GainHandle {
 }
 
 struct GainSource {
-    input: SynthSource,
+    input: PatchSource,
     gain: GainHandle,
 }
 
@@ -37,7 +39,7 @@ impl Effect for Shared<Gain> {
         "Gain"
     }
 
-    fn apply(&self, input: SynthSource) -> SynthSource {
+    fn apply(&self, input: PatchSource) -> PatchSource {
         Box::new(GainSource {
             input,
             gain: self.clone(),

@@ -1,8 +1,10 @@
-use crate::generators::basic::Wave;
-use crate::nodes::adsr::Adsr;
-use crate::nodes::gain::Gain;
-use crate::nodes::lfo_amp::LfoAmp;
-use crate::nodes::lowpass::LowPass;
+//! Snapshot of the current audio engine state exposed to subscribers
+
+use crate::Effects::adsr::Adsr;
+use crate::Effects::gain::Gain;
+use crate::Effects::lfo_amp::LfoAmp;
+use crate::Effects::lowpass::LowPass;
+use crate::Oscilators::basic::Wave;
 
 #[derive(Debug, Clone)]
 pub struct Snapshot {

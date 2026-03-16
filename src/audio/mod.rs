@@ -1,4 +1,4 @@
-//! Public audio module: commands, client API, runtime state, bus wiring, and engine loop
+//! Responsible for controling the audio layer -> commands, snapshots, and engine communication
 
 mod bus;
 mod client;

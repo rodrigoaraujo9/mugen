@@ -1,6 +1,8 @@
-use crate::generators::basic::Wave;
-use crate::nodes::lfo::LfoOsc;
-use crate::patch::{Effect, SynthSource};
+//! Applies low-frequency modulation to signal gain
+
+use crate::Effects::lfo::LfoOsc;
+use crate::Oscilators::basic::Wave;
+use crate::patch::{Effect, PatchSource};
 use crate::shared::Shared;
 
 #[derive(Debug, Clone, Copy)]
@@ -24,7 +26,7 @@ pub fn make_lfo_amp(lfo: LfoAmp) -> LfoAmpHandle {
 }
 
 struct LfoAmpSource {
-    input: SynthSource,
+    input: PatchSource,
     lfo_amp: LfoAmpHandle,
     lfo: LfoOsc,
 }
@@ -54,7 +56,7 @@ impl Effect for Shared<LfoAmp> {
         "LFO Amp"
     }
 
-    fn apply(&self, input: SynthSource) -> SynthSource {
+    fn apply(&self, input: PatchSource) -> PatchSource {
         let cfg = self.get();
         let sr = input.sample_rate().max(1);
 

@@ -1,11 +1,12 @@
+//! Stores live engine parameters and patch handles
+
+use crate::Effects::adsr::{Adsr, AdsrHandle, make_adsr};
+use crate::Effects::gain::{Gain, GainHandle, make_gain};
+use crate::Effects::lfo_amp::{LfoAmp, LfoAmpHandle, make_lfo_amp};
+use crate::Effects::lowpass::{LowPass, LowPassHandle, make_lowpass};
+use crate::Oscilators::basic::{OscHandle, Wave, make_osc};
 use crate::audio::Snapshot;
-use crate::generators::basic::{OscHandle, Wave, make_osc};
-use crate::nodes::adsr::{Adsr, AdsrHandle, make_adsr};
-use crate::nodes::gain::{Gain, GainHandle, make_gain};
-use crate::nodes::lfo_amp::{LfoAmp, LfoAmpHandle, make_lfo_amp};
-use crate::nodes::lowpass::{LowPass, LowPassHandle, make_lowpass};
 use crate::patch::{Patch, SharedEffect};
-use crate::shared::Shared;
 use device_query::Keycode;
 use std::collections::HashSet;
 use std::sync::Arc;

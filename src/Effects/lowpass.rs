@@ -1,4 +1,6 @@
-use crate::patch::{Effect, SynthSource};
+//! Attenuates high frequencies with shared cutoff control
+
+use crate::patch::{Effect, PatchSource};
 use crate::shared::Shared;
 use std::f32::consts::TAU;
 
@@ -24,7 +26,7 @@ fn alpha(sample_rate: f32, cutoff_hz: f32) -> f32 {
 }
 
 struct LowPassSource {
-    input: SynthSource,
+    input: PatchSource,
     lowpass: LowPassHandle,
     prev_y: f32,
 }
@@ -52,7 +54,7 @@ impl Effect for Shared<LowPass> {
         "LowPass"
     }
 
-    fn apply(&self, input: SynthSource) -> SynthSource {
+    fn apply(&self, input: PatchSource) -> PatchSource {
         Box::new(LowPassSource {
             input,
             lowpass: self.clone(),

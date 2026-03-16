@@ -1,17 +1,19 @@
+//! Constructs patch -> Builds voices from oscillator, ADSR, and modular effects
+
 use rodio::Source;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
-use crate::generators::basic::{OscHandle, Wave, osc_source};
-use crate::nodes::adsr::{Adsr, AdsrHandle, adsr};
+use crate::Effects::adsr::{Adsr, AdsrHandle, adsr};
+use crate::Oscilators::basic::{OscHandle, Wave, osc_source};
 
 pub type Sample = f32;
-pub type SynthSource = Box<dyn Source<Item = Sample> + Send>;
+pub type PatchSource = Box<dyn Source<Item = Sample> + Send>;
 pub type Gate = Arc<AtomicBool>;
 
 pub trait Effect: Send + Sync {
     fn name(&self) -> &'static str;
-    fn apply(&self, input: SynthSource) -> SynthSource;
+    fn apply(&self, input: PatchSource) -> PatchSource;
 }
 
 pub type SharedEffect = Arc<dyn Effect>;
@@ -52,8 +54,8 @@ impl Patch {
     }
 
     #[inline]
-    pub fn build_voice(&self, frequency: f32, gate: Gate) -> SynthSource {
-        let mut source: SynthSource = Box::new(osc_source(frequency, self.osc.clone()));
+    pub fn build_voice(&self, frequency: f32, gate: Gate) -> PatchSource {
+        let mut source: PatchSource = Box::new(osc_source(frequency, self.osc.clone()));
 
         for effect in &self.effects {
             source = effect.apply(source);

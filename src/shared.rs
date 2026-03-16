@@ -1,3 +1,5 @@
+//! Thread-safe live parameter storage
+
 use std::sync::{Arc, RwLock};
 
 #[derive(Debug)]
