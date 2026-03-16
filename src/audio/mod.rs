@@ -1,4 +1,4 @@
-//! Public audio module -> commands, client API, runtime state, bus wiring, and engine loop
+//! Public audio module: commands, client API, runtime state, bus wiring, and engine loop
 
 mod bus;
 mod client;
@@ -7,9 +7,9 @@ mod engine;
 mod snapshot;
 mod state;
 
-pub use bus::{AudioBus, client, take_engine_io};
-pub use client::AudioClient;
-pub use command::AudioCommand;
+pub use bus::{Bus, client, take_engine_channels};
+pub use client::Client;
+pub use command::Command;
 pub use engine::run;
-pub use snapshot::AudioSnapshot;
-pub use state::AudioState;
+pub use snapshot::Snapshot;
+pub use state::State;

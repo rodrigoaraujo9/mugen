@@ -2,4 +2,4 @@
 
 mod player;
 
-pub use player::{ActiveNote, Player};
+pub use player::{ActiveVoice, Player};

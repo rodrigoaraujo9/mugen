@@ -6,10 +6,11 @@ use crate::nodes::lfo_amp::LfoAmpParams;
 use crate::nodes::lowpass::LowPassParams;
 
 #[derive(Debug, Clone)]
-pub struct AudioSnapshot {
+pub struct Snapshot {
     pub volume: f32,
     pub muted: bool,
-    pub wave_kind: Wave,
+    pub wave: Wave,
+    pub octave: i32,
     pub patch_name: String,
     pub adsr: Adsr,
     pub lfo: LfoAmpParams,

@@ -7,11 +7,11 @@ use rodio::stream::{OutputStream, OutputStreamBuilder};
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 
-pub type ActiveNote = (Sink, Gate);
+pub type ActiveVoice = (Sink, Gate);
 
 pub struct Player {
     pub stream: OutputStream,
-    pub voices: HashMap<Keycode, Vec<ActiveNote>>,
+    voices: HashMap<Keycode, Vec<ActiveVoice>>,
 }
 
 impl Player {
@@ -20,6 +20,10 @@ impl Player {
             stream: OutputStreamBuilder::open_default_stream()?,
             voices: HashMap::new(),
         })
+    }
+
+    pub fn add_voice(&mut self, keycode: Keycode, sink: Sink, gate: Gate) {
+        self.voices.entry(keycode).or_default().push((sink, gate));
     }
 
     pub fn stop_note(&mut self, keycode: Keycode) {
@@ -39,14 +43,14 @@ impl Player {
         }
     }
 
-    pub fn cleanup_finished(&mut self) {
+    pub fn clear_finished(&mut self) {
         self.voices.retain(|_, voices| {
             voices.retain(|(sink, _)| !sink.empty());
             !voices.is_empty()
         });
     }
 
-    pub fn set_all_volume(&mut self, volume: f32) {
+    pub fn set_volume(&mut self, volume: f32) {
         for voices in self.voices.values_mut() {
             for (sink, _) in voices {
                 sink.set_volume(volume);
@@ -54,7 +58,7 @@ impl Player {
         }
     }
 
-    pub fn set_all_muted(&mut self, muted: bool) {
+    pub fn set_muted(&mut self, muted: bool) {
         for voices in self.voices.values_mut() {
             for (sink, _) in voices {
                 if muted {
