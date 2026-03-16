@@ -208,7 +208,7 @@ impl UiState {
             muted: snapshot.muted,
             volume: snapshot.volume,
             held_keys: HashSet::new(),
-            octave: 0,
+            octave: snapshot.octave,
         }
     }
 
