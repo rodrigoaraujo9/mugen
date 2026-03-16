@@ -2,7 +2,7 @@ use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
 };
-use synth_rs::{audio::client, play::run::run, ui::run_ui};
+use synth_rs::{audio::client, audio::run, ui::run_ui};
 use tokio::sync::watch;
 
 #[tokio::main]

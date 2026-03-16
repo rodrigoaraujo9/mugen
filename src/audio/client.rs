@@ -1,4 +1,6 @@
-use super::types::{AudioCommand, AudioSnapshot};
+//! API for sending commands to the audio engine and subscribing to state
+
+use crate::audio::{AudioCommand, AudioSnapshot};
 use crate::generators::basic::Wave;
 use crate::nodes::adsr::Adsr;
 use crate::nodes::lfo_amp::LfoAmpParams;

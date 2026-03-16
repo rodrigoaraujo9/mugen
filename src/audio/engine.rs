@@ -1,8 +1,10 @@
-use crate::audio::{self, AudioCommand};
+//! Audio engine runtime, responsible for input polling, command handling, state updates, and playback coordination
+
+use crate::audio::{self, AudioCommand, AudioSnapshot, AudioState};
 use crate::config::TICK;
 use crate::key::Key;
 use crate::patch::Gate;
-use crate::play::state::{PlayState, RuntimeState};
+use crate::play::Player;
 use device_query::{DeviceQuery, DeviceState, Keycode};
 use rodio::Sink;
 use std::{
@@ -22,38 +24,41 @@ enum RuntimeEvent {
 }
 
 #[inline]
-fn publish_snapshot(tx: &tokio::sync::watch::Sender<audio::AudioSnapshot>, rt: &RuntimeState) {
-    let _ = tx.send(rt.snapshot());
+fn sync_snapshot(tx: &tokio::sync::watch::Sender<AudioSnapshot>, state: &AudioState) {
+    let _ = tx.send(state.snapshot());
 }
 
-async fn start_voice(play: &mut PlayState, rt: &RuntimeState, keycode: Keycode) {
+async fn spawn_voice(player: &mut Player, state: &AudioState, keycode: Keycode) {
     let Some(key) = Key::from_keycode(keycode) else {
         return;
     };
-    let freq = key.transpose(rt.octave_offset * 12).frequency();
+
+    let freq = key.transpose(state.octave_offset * 12).frequency();
     let gate: Gate = Arc::new(AtomicBool::new(true));
 
-    let sink = Sink::connect_new(play.stream.mixer());
-    sink.set_volume(rt.volume);
-    if rt.muted {
+    let sink = Sink::connect_new(player.stream.mixer());
+    sink.set_volume(state.volume);
+
+    if state.muted {
         sink.pause();
     }
 
-    sink.append(rt.patch.voice(freq, gate.clone()));
-    play.voices.entry(keycode).or_default().push((sink, gate));
+    sink.append(state.patch.voice(freq, gate.clone()));
+    player.voices.entry(keycode).or_default().push((sink, gate));
 }
 
-async fn rebuild_held_voices(play: &mut PlayState, rt: &RuntimeState) {
-    let held: Vec<_> = rt.held_keys.iter().copied().collect();
-    play.kill_all();
+async fn rebuild_voices(player: &mut Player, state: &AudioState) {
+    let held: Vec<_> = state.held_keys.iter().copied().collect();
+    player.kill_all();
+
     for key in held {
-        start_voice(play, rt, key).await;
+        spawn_voice(player, state, key).await;
     }
 }
 
 #[inline]
-fn cycle_generator(rt: &RuntimeState) {
-    rt.patch.osc.update(|p| p.kind = p.kind.toggle());
+fn cycle_generator(state: &AudioState) {
+    state.patch.osc.update(|p| p.kind = p.kind.toggle());
 }
 
 pub async fn run(
@@ -61,11 +66,11 @@ pub async fn run(
     focused: Arc<AtomicBool>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let _ = audio::client().await;
-    let (mut cmd_rx, snapshot_tx, held_keys_tx, initial) = audio::take_runtime_io().await;
+    let (mut cmd_rx, snapshot_tx, held_keys_tx, initial) = audio::take_engine_io().await;
 
-    let mut rt = RuntimeState::new(initial);
-    let mut play = PlayState::new()?;
-    publish_snapshot(&snapshot_tx, &rt);
+    let mut state = AudioState::new(initial);
+    let mut player = Player::new()?;
+    sync_snapshot(&snapshot_tx, &state);
 
     let stop_flag = Arc::new(AtomicBool::new(false));
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<RuntimeEvent>();
@@ -132,32 +137,40 @@ pub async fn run(
             _ = &mut ctrl_c => break,
 
             _ = shutdown.changed() => {
-                if *shutdown.borrow() { break; }
+                if *shutdown.borrow() {
+                    break;
+                }
             }
 
             msg = rx.recv() => match msg {
                 Some(RuntimeEvent::KeysChanged(now)) => {
-                    let toggle_b = now.contains(&Keycode::B) && !last_keys.contains(&Keycode::B);
-                    let musical_now: HashSet<Keycode> = now.iter().copied().filter(|k| *k != Keycode::B).collect();
-                    let musical_prev: HashSet<Keycode> = last_keys.iter().copied().filter(|k| *k != Keycode::B).collect();
+                    let toggle_b =
+                        now.contains(&Keycode::B) && !last_keys.contains(&Keycode::B);
 
-                    rt.held_keys = musical_now.clone();
-                    let _ = held_keys_tx.send(rt.held_keys.clone());
+                    let now: HashSet<Keycode> =
+                        now.iter().copied().filter(|k| *k != Keycode::B).collect();
+
+                    let prev: HashSet<Keycode> =
+                        last_keys.iter().copied().filter(|k| *k != Keycode::B).collect();
+
+                    state.held_keys = now.clone();
+                    let _ = held_keys_tx.send(state.held_keys.clone());
 
                     if toggle_b {
-                        cycle_generator(&rt);
-                        publish_snapshot(&snapshot_tx, &rt);
-                        rebuild_held_voices(&mut play, &rt).await;
+                        cycle_generator(&state);
+                        sync_snapshot(&snapshot_tx, &state);
+                        rebuild_voices(&mut player, &state).await;
                     }
 
-                    for key in musical_now.difference(&musical_prev) {
-                        start_voice(&mut play, &rt, *key).await;
-                    }
-                    for key in musical_prev.difference(&musical_now) {
-                        play.stop_note(*key);
+                    for key in now.difference(&prev) {
+                        spawn_voice(&mut player, &state, *key).await;
                     }
 
-                    play.cleanup_finished();
+                    for key in prev.difference(&now) {
+                        player.stop_note(*key);
+                    }
+
+                    player.cleanup_finished();
                     last_keys = now;
                 }
                 Some(RuntimeEvent::Exit) | None => break,
@@ -168,37 +181,47 @@ pub async fn run(
 
                 match cmd {
                     AudioCommand::SetVolume(v) => {
-                        rt.volume = v.clamp(0.0, 2.0);
-                        play.set_all_volume(rt.volume);
+                        state.volume = v.clamp(0.0, 2.0);
+                        player.set_all_volume(state.volume);
                     }
+
                     AudioCommand::SetMuted(m) => {
-                        rt.muted = m;
-                        play.set_all_muted(m);
+                        state.muted = m;
+                        player.set_all_muted(m);
                     }
+
                     AudioCommand::SetGeneratorKind(kind) => {
-                        rt.patch.osc.update(|p| p.kind = kind);
-                        rebuild_held_voices(&mut play, &rt).await;
+                        state.patch.osc.update(|p| p.kind = kind);
+                        rebuild_voices(&mut player, &state).await;
                     }
-                    AudioCommand::SetAdsr(adsr) =>
-                        rt.patch.adsr.set(adsr),
-                    AudioCommand::SetLfo(params) =>
-                        rt.patch.lfo.set(params),
-                    AudioCommand::SetLowPass(params) =>
-                        rt.patch.lowpass.set(params),
+
+                    AudioCommand::SetAdsr(adsr) => {
+                        state.patch.adsr.set(adsr);
+                    }
+
+                    AudioCommand::SetLfo(params) => {
+                        state.patch.lfo.set(params);
+                    }
+
+                    AudioCommand::SetLowPass(params) => {
+                        state.patch.lowpass.set(params);
+                    }
+
                     AudioCommand::SetOctave(octave) => {
-                        rt.octave_offset = octave;
-                        rebuild_held_voices(&mut play, &rt).await;
+                        state.octave_offset = octave;
+                        rebuild_voices(&mut player, &state).await;
                     }
                 }
 
-                publish_snapshot(&snapshot_tx, &rt);
-                play.cleanup_finished();
+                sync_snapshot(&snapshot_tx, &state);
+                player.cleanup_finished();
             }
         }
     }
 
     stop_flag.store(true, Ordering::Relaxed);
-    play.kill_all();
+    player.kill_all();
     let _ = poll_handle.await;
+
     Ok(())
 }

@@ -1,3 +1,5 @@
+//! Snapshot of the current audio engine state exposed to subscribers
+
 use crate::generators::basic::Wave;
 use crate::nodes::adsr::Adsr;
 use crate::nodes::lfo_amp::LfoAmpParams;
@@ -12,14 +14,4 @@ pub struct AudioSnapshot {
     pub adsr: Adsr,
     pub lfo: LfoAmpParams,
     pub lowpass: LowPassParams,
-}
-
-pub enum AudioCommand {
-    SetVolume(f32),
-    SetMuted(bool),
-    SetGeneratorKind(Wave),
-    SetAdsr(Adsr),
-    SetOctave(i32),
-    SetLfo(LfoAmpParams),
-    SetLowPass(LowPassParams),
 }
