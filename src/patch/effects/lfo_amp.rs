@@ -1,7 +1,7 @@
 //! Applies low-frequency modulation to signal gain
 
-use crate::effects::lfo::LfoOsc;
-use crate::oscilators::basic::Wave;
+use crate::patch::effects::lfo::LfoOsc;
+use crate::patch::oscilators::basic::Wave;
 use crate::patch::{Effect, PatchSource};
 use crate::shared::Shared;
 

@@ -1,8 +1,6 @@
 pub mod audio;
 pub mod config;
-pub mod effects;
 pub mod key;
-pub mod oscilators;
 pub mod patch;
 pub mod play;
 pub mod shared;

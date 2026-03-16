@@ -1,6 +1,6 @@
 //! Magic numbers and synth defaults
 
-use crate::oscilators::basic::Wave;
+use crate::patch::oscilators::basic::Wave;
 use tokio::time::Duration;
 
 // play.rs

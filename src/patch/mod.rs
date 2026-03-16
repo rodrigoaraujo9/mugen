@@ -1,11 +1,14 @@
 //! Constructs patch -> Builds voices from oscillator, ADSR, and modular effects
 
+pub mod effects;
+pub mod oscilators;
+
 use rodio::Source;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
-use crate::effects::adsr::{Adsr, AdsrHandle, adsr};
-use crate::oscilators::basic::{OscHandle, Wave, osc_source};
+use crate::patch::effects::adsr::{Adsr, AdsrHandle, adsr};
+use crate::patch::oscilators::basic::{OscHandle, Wave, osc_source};
 
 pub type Sample = f32;
 pub type PatchSource = Box<dyn Source<Item = Sample> + Send>;

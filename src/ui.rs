@@ -32,10 +32,10 @@ use tokio::sync::{mpsc, watch};
 use tokio::time::sleep;
 
 use crate::audio::{Client, Snapshot};
-use crate::effects::adsr::Adsr;
-use crate::effects::lfo_amp::LfoAmp;
-use crate::effects::lowpass::LowPass;
-use crate::oscilators::basic::Wave;
+use crate::patch::effects::adsr::Adsr;
+use crate::patch::effects::lfo_amp::LfoAmp;
+use crate::patch::effects::lowpass::LowPass;
+use crate::patch::oscilators::basic::Wave;
 
 #[allow(dead_code)]
 mod kdr {
