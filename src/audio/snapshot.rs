@@ -1,9 +1,8 @@
-//! Snapshot of the current audio engine state exposed to subscribers
-
 use crate::generators::basic::Wave;
 use crate::nodes::adsr::Adsr;
-use crate::nodes::lfo_amp::LfoAmpParams;
-use crate::nodes::lowpass::LowPassParams;
+use crate::nodes::gain::Gain;
+use crate::nodes::lfo_amp::LfoAmp;
+use crate::nodes::lowpass::LowPass;
 
 #[derive(Debug, Clone)]
 pub struct Snapshot {
@@ -13,6 +12,7 @@ pub struct Snapshot {
     pub octave: i32,
     pub patch_name: String,
     pub adsr: Adsr,
-    pub lfo: LfoAmpParams,
-    pub lowpass: LowPassParams,
+    pub gain: Gain,
+    pub lfo_amp: LfoAmp,
+    pub lowpass: LowPass,
 }

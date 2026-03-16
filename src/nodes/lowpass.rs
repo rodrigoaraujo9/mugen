@@ -1,29 +1,18 @@
-use crate::patch::SynthSource;
+use crate::patch::{Effect, SynthSource};
 use crate::shared::Shared;
-use rodio::Source;
 use std::f32::consts::TAU;
-use std::time::Duration;
 
 #[derive(Debug, Clone, Copy)]
-pub struct LowPassParams {
+pub struct LowPass {
     pub cutoff_hz: f32,
 }
 
-pub type LowPassHandle = Shared<LowPassParams>;
+pub type LowPassHandle = Shared<LowPass>;
 
 #[inline]
-pub fn lowpass_handle(params: LowPassParams) -> LowPassHandle {
-    Shared::new(LowPassParams {
-        cutoff_hz: params.cutoff_hz.max(1.0),
-    })
-}
-
-#[inline]
-pub fn lowpass(input: SynthSource, params: LowPassHandle) -> SynthSource {
-    Box::new(LowPassSource {
-        input,
-        params,
-        prev_y: 0.0,
+pub fn make_lowpass(lowpass: LowPass) -> LowPassHandle {
+    Shared::new(LowPass {
+        cutoff_hz: lowpass.cutoff_hz.max(1.0),
     })
 }
 
@@ -36,7 +25,7 @@ fn alpha(sample_rate: f32, cutoff_hz: f32) -> f32 {
 
 struct LowPassSource {
     input: SynthSource,
-    params: LowPassHandle,
+    lowpass: LowPassHandle,
     prev_y: f32,
 }
 
@@ -46,7 +35,7 @@ impl Iterator for LowPassSource {
     fn next(&mut self) -> Option<Self::Item> {
         let x = self.input.next()?;
         let sr = self.input.sample_rate() as f32;
-        let cutoff = self.params.get().cutoff_hz;
+        let cutoff = self.lowpass.get().cutoff_hz;
         let a = alpha(sr, cutoff);
 
         let y = a * x + (1.0 - a) * self.prev_y;
@@ -56,20 +45,18 @@ impl Iterator for LowPassSource {
     }
 }
 
-impl Source for LowPassSource {
-    fn current_span_len(&self) -> Option<usize> {
-        self.input.current_span_len()
+crate::impl_source_passthrough!(LowPassSource, input);
+
+impl Effect for Shared<LowPass> {
+    fn name(&self) -> &'static str {
+        "LowPass"
     }
 
-    fn channels(&self) -> u16 {
-        self.input.channels()
-    }
-
-    fn sample_rate(&self) -> u32 {
-        self.input.sample_rate()
-    }
-
-    fn total_duration(&self) -> Option<Duration> {
-        self.input.total_duration()
+    fn apply(&self, input: SynthSource) -> SynthSource {
+        Box::new(LowPassSource {
+            input,
+            lowpass: self.clone(),
+            prev_y: 0.0,
+        })
     }
 }

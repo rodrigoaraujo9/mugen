@@ -34,8 +34,8 @@ use tokio::time::sleep;
 use crate::audio::{Client, Snapshot};
 use crate::generators::basic::Wave;
 use crate::nodes::adsr::Adsr;
-use crate::nodes::lfo_amp::LfoAmpParams;
-use crate::nodes::lowpass::LowPassParams;
+use crate::nodes::lfo_amp::LfoAmp;
+use crate::nodes::lowpass::LowPass;
 
 #[allow(dead_code)]
 mod kdr {
@@ -162,10 +162,10 @@ struct UiState {
     mod_tab: ModTab,
 
     lfo_param_idx: usize,
-    lfo: LfoAmpParams,
+    lfo: LfoAmp,
 
     lowpass_param_idx: usize,
-    lowpass: LowPassParams,
+    lowpass: LowPass,
 
     patch_name: String,
     wave: Wave,
@@ -198,7 +198,7 @@ impl UiState {
 
             mod_tab: ModTab::Lfo,
             lfo_param_idx: 0,
-            lfo: snapshot.lfo,
+            lfo: snapshot.lfo_amp,
 
             lowpass_param_idx: 0,
             lowpass: snapshot.lowpass,
@@ -238,7 +238,7 @@ impl UiState {
         self.muted = snapshot.muted;
         self.volume = snapshot.volume;
         self.adsr = snapshot.adsr;
-        self.lfo = snapshot.lfo;
+        self.lfo = snapshot.lfo_amp;
         self.lowpass = snapshot.lowpass;
         self.octave = snapshot.octave;
         self.sync_wave_idx();
@@ -430,7 +430,7 @@ fn handle_mod(ui: &mut UiState, client: &Client, key: KeyEvent) {
         KeyCode::Left => match ui.mod_tab {
             ModTab::Lfo => {
                 tweak_lfo(ui, -1);
-                client.set_lfo(ui.lfo);
+                client.set_lfo_amp(ui.lfo);
             }
             ModTab::LowPass => {
                 tweak_lowpass(ui, -1);
@@ -441,7 +441,7 @@ fn handle_mod(ui: &mut UiState, client: &Client, key: KeyEvent) {
         KeyCode::Right => match ui.mod_tab {
             ModTab::Lfo => {
                 tweak_lfo(ui, 1);
-                client.set_lfo(ui.lfo);
+                client.set_lfo_amp(ui.lfo);
             }
             ModTab::LowPass => {
                 tweak_lowpass(ui, 1);
@@ -483,7 +483,7 @@ fn tweak_lfo(ui: &mut UiState, dir: i32) {
     let dir = if dir < 0 { -1 } else { 1 };
 
     match ui.selected_lfo_param() {
-        LfoParam::Kind => ui.lfo.kind = next_wave(ui.lfo.kind, dir),
+        LfoParam::Kind => ui.lfo.wave = next_wave(ui.lfo.wave, dir),
         LfoParam::RateHz => {
             ui.lfo.rate_hz = (ui.lfo.rate_hz + dir as f32 * 0.25).clamp(0.05, 40.0);
         }
@@ -859,7 +859,7 @@ fn draw_mod(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
         ModTab::Lfo => {
             for (i, param) in LfoParam::ALL.iter().enumerate() {
                 let value = match param {
-                    LfoParam::Kind => ui.lfo.kind.name().to_string(),
+                    LfoParam::Kind => ui.lfo.wave.name().to_string(),
                     LfoParam::RateHz => format!("{:.2}", ui.lfo.rate_hz),
                     LfoParam::Depth => format!("{:.2}", ui.lfo.depth),
                 };

@@ -1,25 +1,42 @@
 use std::sync::{Arc, RwLock};
 
-#[derive(Clone)]
-pub struct Shared<T>(Arc<RwLock<T>>);
+#[derive(Debug)]
+pub struct Shared<T> {
+    inner: Arc<RwLock<T>>,
+}
 
 impl<T> Shared<T> {
+    #[inline]
     pub fn new(value: T) -> Self {
-        Self(Arc::new(RwLock::new(value)))
+        Self {
+            inner: Arc::new(RwLock::new(value)),
+        }
     }
 
+    #[inline]
     pub fn get(&self) -> T
     where
         T: Copy,
     {
-        *self.0.read().unwrap()
+        *self.inner.read().expect("shared read poisoned")
     }
 
+    #[inline]
     pub fn set(&self, value: T) {
-        *self.0.write().unwrap() = value;
+        *self.inner.write().expect("shared write poisoned") = value;
     }
 
+    #[inline]
     pub fn update(&self, f: impl FnOnce(&mut T)) {
-        f(&mut self.0.write().unwrap());
+        let mut guard = self.inner.write().expect("shared write poisoned");
+        f(&mut guard);
+    }
+}
+
+impl<T> Clone for Shared<T> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+        }
     }
 }

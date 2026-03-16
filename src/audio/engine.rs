@@ -59,7 +59,7 @@ async fn restart_held_notes(player: &mut Player, state: &State) {
 
 #[inline]
 fn toggle_wave(state: &State) {
-    state.patch.toggle_wave();
+    state.toggle_wave();
 }
 
 pub async fn run(
@@ -195,15 +195,19 @@ pub async fn run(
                     }
 
                     Command::SetAdsr(adsr) => {
-                        state.patch.set_adsr(adsr);
+                        state.set_adsr(adsr);
                     }
 
-                    Command::SetLfo(params) => {
-                        state.patch.set_lfo(params);
+                    Command::SetGain(gain) => {
+                        state.set_gain(gain);
                     }
 
-                    Command::SetLowPass(params) => {
-                        state.patch.set_lowpass(params);
+                    Command::SetLfoAmp(lfo_amp) => {
+                        state.set_lfo_amp(lfo_amp);
+                    }
+
+                    Command::SetLowPass(lowpass) => {
+                        state.set_lowpass(lowpass);
                     }
 
                     Command::SetOctave(octave) => {

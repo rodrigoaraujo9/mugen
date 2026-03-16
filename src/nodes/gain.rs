@@ -1,30 +1,23 @@
-use crate::patch::SynthSource;
+use crate::patch::{Effect, SynthSource};
 use crate::shared::Shared;
-use rodio::Source;
-use std::time::Duration;
 
 #[derive(Debug, Clone, Copy)]
-pub struct GainParams {
+pub struct Gain {
     pub amount: f32,
 }
 
-pub type GainHandle = Shared<GainParams>;
+pub type GainHandle = Shared<Gain>;
 
 #[inline]
-pub fn gain_handle(amount: f32) -> GainHandle {
-    Shared::new(GainParams {
+pub fn make_gain(amount: f32) -> GainHandle {
+    Shared::new(Gain {
         amount: amount.max(0.0),
     })
 }
 
-#[inline]
-pub fn gain(input: SynthSource, params: GainHandle) -> SynthSource {
-    Box::new(GainSource { input, params })
-}
-
 struct GainSource {
     input: SynthSource,
-    params: GainHandle,
+    gain: GainHandle,
 }
 
 impl Iterator for GainSource {
@@ -32,25 +25,22 @@ impl Iterator for GainSource {
 
     fn next(&mut self) -> Option<Self::Item> {
         let x = self.input.next()?;
-        let g = self.params.get().amount.max(0.0);
+        let g = self.gain.get().amount.max(0.0);
         Some(x * g)
     }
 }
 
-impl Source for GainSource {
-    fn current_span_len(&self) -> Option<usize> {
-        self.input.current_span_len()
+crate::impl_source_passthrough!(GainSource, input);
+
+impl Effect for Shared<Gain> {
+    fn name(&self) -> &'static str {
+        "Gain"
     }
 
-    fn channels(&self) -> u16 {
-        self.input.channels()
-    }
-
-    fn sample_rate(&self) -> u32 {
-        self.input.sample_rate()
-    }
-
-    fn total_duration(&self) -> Option<Duration> {
-        self.input.total_duration()
+    fn apply(&self, input: SynthSource) -> SynthSource {
+        Box::new(GainSource {
+            input,
+            gain: self.clone(),
+        })
     }
 }

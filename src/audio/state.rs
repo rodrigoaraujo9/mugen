@@ -1,61 +1,113 @@
-//! Internal mutable state owned by the audio engine
-
 use crate::audio::Snapshot;
-use crate::generators::basic::{Wave, osc_params};
-use crate::nodes::adsr::{Adsr, adsr_handle};
-use crate::nodes::lfo_amp::{LfoAmpParams, lfo_amp_handle};
-use crate::nodes::lowpass::{LowPassParams, lowpass_handle};
-use crate::patch::Patch;
+use crate::generators::basic::{OscHandle, Wave, make_osc};
+use crate::nodes::adsr::{Adsr, AdsrHandle, make_adsr};
+use crate::nodes::gain::{Gain, GainHandle, make_gain};
+use crate::nodes::lfo_amp::{LfoAmp, LfoAmpHandle, make_lfo_amp};
+use crate::nodes::lowpass::{LowPass, LowPassHandle, make_lowpass};
+use crate::patch::{Patch, SharedEffect};
+use crate::shared::Shared;
 use device_query::Keycode;
 use std::collections::HashSet;
+use std::sync::Arc;
 
 pub struct State {
     pub volume: f32,
     pub muted: bool,
     pub octave: i32,
     pub held_keys: HashSet<Keycode>,
+
+    pub osc: OscHandle,
+    pub adsr: AdsrHandle,
+    pub gain: GainHandle,
+    pub lfo_amp: LfoAmpHandle,
+    pub lowpass: LowPassHandle,
+
     pub patch: Patch,
 }
 
 impl State {
     pub fn from_snapshot(snapshot: Snapshot) -> Self {
-        let osc = osc_params(snapshot.wave);
-        let adsr = adsr_handle(snapshot.adsr);
-        let lfo = lfo_amp_handle(snapshot.lfo);
-        let lowpass = lowpass_handle(snapshot.lowpass);
+        let osc = make_osc(snapshot.wave);
+        let adsr = make_adsr(snapshot.adsr);
+        let gain = make_gain(snapshot.gain.amount);
+        let lfo_amp = make_lfo_amp(snapshot.lfo_amp);
+        let lowpass = make_lowpass(snapshot.lowpass);
+
+        let effects: Vec<SharedEffect> = vec![
+            Arc::new(gain.clone()),
+            Arc::new(lfo_amp.clone()),
+            Arc::new(lowpass.clone()),
+        ];
+
+        let patch = Patch::new(osc.clone(), adsr.clone(), effects);
 
         Self {
             volume: snapshot.volume,
             muted: snapshot.muted,
-            octave: 0,
+            octave: snapshot.octave,
             held_keys: HashSet::new(),
-            patch: Patch::new(osc, adsr, lfo, lowpass),
+            osc,
+            adsr,
+            gain,
+            lfo_amp,
+            lowpass,
+            patch,
         }
     }
 
     #[inline]
     pub fn wave(&self) -> Wave {
-        self.patch.wave()
-    }
-
-    #[inline]
-    pub fn adsr(&self) -> Adsr {
-        self.patch.adsr()
-    }
-
-    #[inline]
-    pub fn lfo(&self) -> LfoAmpParams {
-        self.patch.lfo()
-    }
-
-    #[inline]
-    pub fn lowpass(&self) -> LowPassParams {
-        self.patch.lowpass()
+        self.osc.get().wave
     }
 
     #[inline]
     pub fn set_wave(&self, wave: Wave) {
-        self.patch.set_wave(wave);
+        self.osc.update(|osc| osc.wave = wave);
+    }
+
+    #[inline]
+    pub fn toggle_wave(&self) {
+        self.osc.update(|osc| osc.wave = osc.wave.toggle());
+    }
+
+    #[inline]
+    pub fn adsr(&self) -> Adsr {
+        self.adsr.get()
+    }
+
+    #[inline]
+    pub fn set_adsr(&self, adsr: Adsr) {
+        self.adsr.set(adsr);
+    }
+
+    #[inline]
+    pub fn gain(&self) -> Gain {
+        self.gain.get()
+    }
+
+    #[inline]
+    pub fn set_gain(&self, gain: Gain) {
+        self.gain.set(gain);
+    }
+
+    #[inline]
+    pub fn lfo_amp(&self) -> LfoAmp {
+        self.lfo_amp.get()
+    }
+
+    #[inline]
+    pub fn set_lfo_amp(&self, lfo_amp: LfoAmp) {
+        self.lfo_amp.set(lfo_amp);
+    }
+
+    #[inline]
+    pub fn lowpass(&self) -> LowPass {
+        self.lowpass.get()
+    }
+
+    #[inline]
+    pub fn set_lowpass(&self, lowpass: LowPass) {
+        self.lowpass.set(lowpass);
     }
 
     #[inline]
@@ -64,11 +116,12 @@ impl State {
             volume: self.volume,
             muted: self.muted,
             wave: self.wave(),
+            octave: self.octave,
             patch_name: self.patch.name(),
             adsr: self.adsr(),
-            lfo: self.lfo(),
+            gain: self.gain(),
+            lfo_amp: self.lfo_amp(),
             lowpass: self.lowpass(),
-            octave: self.octave,
         }
     }
 }

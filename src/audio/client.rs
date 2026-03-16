@@ -1,10 +1,9 @@
-//! API for sending commands to the audio engine and subscribing to state
-
 use crate::audio::{Command, Snapshot};
 use crate::generators::basic::Wave;
 use crate::nodes::adsr::Adsr;
-use crate::nodes::lfo_amp::LfoAmpParams;
-use crate::nodes::lowpass::LowPassParams;
+use crate::nodes::gain::Gain;
+use crate::nodes::lfo_amp::LfoAmp;
+use crate::nodes::lowpass::LowPass;
 use device_query::Keycode;
 use std::collections::HashSet;
 use tokio::sync::{mpsc, watch};
@@ -50,16 +49,20 @@ impl Client {
         self.send(Command::SetAdsr(adsr));
     }
 
+    pub fn set_gain(&self, gain: Gain) {
+        self.send(Command::SetGain(gain));
+    }
+
+    pub fn set_lfo_amp(&self, lfo_amp: LfoAmp) {
+        self.send(Command::SetLfoAmp(lfo_amp));
+    }
+
+    pub fn set_lowpass(&self, lowpass: LowPass) {
+        self.send(Command::SetLowPass(lowpass));
+    }
+
     pub fn set_octave(&self, octave: i32) {
         self.send(Command::SetOctave(octave));
-    }
-
-    pub fn set_lfo(&self, params: LfoAmpParams) {
-        self.send(Command::SetLfo(params));
-    }
-
-    pub fn set_lowpass(&self, params: LowPassParams) {
-        self.send(Command::SetLowPass(params));
     }
 
     pub fn subscribe(&self) -> watch::Receiver<Snapshot> {

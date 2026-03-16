@@ -3,7 +3,7 @@ use std::f32::consts::TAU;
 
 #[derive(Clone)]
 pub struct LfoOsc {
-    kind: Wave,
+    wave: Wave,
     phase: f32,
     rate_hz: f32,
     sample_rate: u32,
@@ -12,9 +12,9 @@ pub struct LfoOsc {
 }
 
 impl LfoOsc {
-    pub fn new(kind: Wave, rate_hz: f32, sample_rate: u32) -> Self {
+    pub fn new(wave: Wave, rate_hz: f32, sample_rate: u32) -> Self {
         let mut osc = Self {
-            kind,
+            wave,
             phase: 0.0,
             rate_hz: rate_hz.max(0.0),
             sample_rate: sample_rate.max(1),
@@ -37,8 +37,8 @@ impl LfoOsc {
         }
     }
 
-    pub fn set_kind(&mut self, kind: Wave) {
-        self.kind = kind;
+    pub fn set_wave(&mut self, wave: Wave) {
+        self.wave = wave;
     }
 
     pub fn set_rate_hz(&mut self, rate_hz: f32) {
@@ -75,7 +75,7 @@ impl LfoOsc {
     }
 
     pub fn next_value(&mut self) -> f32 {
-        match self.kind {
+        match self.wave {
             Wave::Sine => (TAU * self.step_phase()).sin(),
             Wave::Square => {
                 if self.step_phase() < 0.5 {

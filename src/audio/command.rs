@@ -1,9 +1,8 @@
-//! Commands sent to the audio engine
-
 use crate::generators::basic::Wave;
 use crate::nodes::adsr::Adsr;
-use crate::nodes::lfo_amp::LfoAmpParams;
-use crate::nodes::lowpass::LowPassParams;
+use crate::nodes::gain::Gain;
+use crate::nodes::lfo_amp::LfoAmp;
+use crate::nodes::lowpass::LowPass;
 
 #[derive(Debug, Clone, Copy)]
 pub enum Command {
@@ -11,7 +10,8 @@ pub enum Command {
     SetMuted(bool),
     SetWave(Wave),
     SetAdsr(Adsr),
-    SetLfo(LfoAmpParams),
-    SetLowPass(LowPassParams),
+    SetGain(Gain),
+    SetLfoAmp(LfoAmp),
+    SetLowPass(LowPass),
     SetOctave(i32),
 }

@@ -2,7 +2,6 @@ use crate::patch::{Gate, SynthSource};
 use crate::shared::Shared;
 use rodio::Source;
 use std::sync::atomic::Ordering;
-use std::time::Duration;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Adsr {
@@ -13,6 +12,7 @@ pub struct Adsr {
 }
 
 impl Adsr {
+    #[inline]
     pub fn new(attack_s: f32, decay_s: f32, sustain: f32, release_s: f32) -> Self {
         Self {
             attack_s,
@@ -26,7 +26,7 @@ impl Adsr {
 pub type AdsrHandle = Shared<Adsr>;
 
 #[inline]
-pub fn adsr_handle(adsr: Adsr) -> AdsrHandle {
+pub fn make_adsr(adsr: Adsr) -> AdsrHandle {
     Shared::new(adsr)
 }
 
@@ -69,19 +69,19 @@ impl AdsrSource {
     }
 
     fn step(&mut self) -> f32 {
-        let a = self.adsr.get();
+        let adsr = self.adsr.get();
         let sr = self.sample_rate as f32;
 
-        let sustain = a.sustain.clamp(0.0, 1.0);
-        let attack_step = 1.0 / (a.attack_s.max(0.0) * sr).max(1.0);
-        let decay_step = (1.0 - sustain) / (a.decay_s.max(0.0) * sr).max(1.0);
+        let sustain = adsr.sustain.clamp(0.0, 1.0);
+        let attack_step = 1.0 / (adsr.attack_s.max(0.0) * sr).max(1.0);
+        let decay_step = (1.0 - sustain) / (adsr.decay_s.max(0.0) * sr).max(1.0);
 
         if !self.gate.load(Ordering::Relaxed)
             && self.stage != Stage::Release
             && self.stage != Stage::Done
         {
             self.stage = Stage::Release;
-            let release_samples = (a.release_s.max(0.0) * sr).max(1.0);
+            let release_samples = (adsr.release_s.max(0.0) * sr).max(1.0);
             self.release_step = self.amp / release_samples;
         }
 
@@ -138,20 +138,4 @@ impl Iterator for AdsrSource {
     }
 }
 
-impl Source for AdsrSource {
-    fn current_span_len(&self) -> Option<usize> {
-        self.input.current_span_len()
-    }
-
-    fn channels(&self) -> u16 {
-        self.input.channels()
-    }
-
-    fn sample_rate(&self) -> u32 {
-        self.sample_rate
-    }
-
-    fn total_duration(&self) -> Option<Duration> {
-        None
-    }
-}
+crate::impl_source_passthrough!(AdsrSource, input);

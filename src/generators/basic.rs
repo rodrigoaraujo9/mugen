@@ -39,48 +39,48 @@ impl Wave {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct OscParams {
-    pub kind: Wave,
+pub struct Osc {
+    pub wave: Wave,
     pub amplitude: f32,
     pub sample_rate: u32,
 }
 
-impl Default for OscParams {
+impl Default for Osc {
     fn default() -> Self {
         Self {
-            kind: Wave::Sine,
+            wave: Wave::Sine,
             amplitude: AMP_DEFAULT,
             sample_rate: SAMPLE_RATE,
         }
     }
 }
 
-pub type OscParamsHandle = Shared<OscParams>;
+pub type OscHandle = Shared<Osc>;
 
 #[inline]
-pub fn osc_params(kind: Wave) -> OscParamsHandle {
-    Shared::new(OscParams {
-        kind,
-        ..OscParams::default()
+pub fn make_osc(wave: Wave) -> OscHandle {
+    Shared::new(Osc {
+        wave,
+        ..Osc::default()
     })
 }
 
 #[inline]
-pub fn osc(frequency: f32, params: OscParamsHandle) -> OscSource {
-    OscSource::new(frequency, params)
+pub fn osc_source(frequency: f32, osc: OscHandle) -> OscSource {
+    OscSource::new(frequency, osc)
 }
 
 pub struct OscSource {
-    params: OscParamsHandle,
+    osc: OscHandle,
     frequency: f32,
     phase: f32,
     rng: u64,
 }
 
 impl OscSource {
-    pub fn new(frequency: f32, params: OscParamsHandle) -> Self {
+    pub fn new(frequency: f32, osc: OscHandle) -> Self {
         Self {
-            params,
+            osc,
             frequency: frequency.max(0.0),
             phase: 0.0,
             rng: 0x1234_5678_9ABC_DEF0,
@@ -89,7 +89,7 @@ impl OscSource {
 
     #[inline]
     fn sample_rate_live(&self) -> u32 {
-        self.params.get().sample_rate.max(1)
+        self.osc.get().sample_rate.max(1)
     }
 
     fn step_phase(&mut self) -> f32 {
@@ -122,10 +122,10 @@ impl Iterator for OscSource {
     type Item = Sample;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let params = self.params.get();
-        let amp = params.amplitude.max(0.0);
+        let osc = self.osc.get();
+        let amp = osc.amplitude.max(0.0);
 
-        let y = match params.kind {
+        let y = match osc.wave {
             Wave::Sine => (TAU * self.step_phase()).sin(),
             Wave::Square => {
                 if self.step_phase() < 0.5 {
