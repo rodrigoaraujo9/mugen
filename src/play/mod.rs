@@ -2,4 +2,6 @@
 
 mod player;
 
+pub mod key;
+
 pub use player::{ActiveVoice, Player};

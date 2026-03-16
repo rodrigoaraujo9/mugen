@@ -2,9 +2,9 @@
 
 use crate::audio::{self, Command, Snapshot, State};
 use crate::config::TICK;
-use crate::key::Key;
 use crate::patch::Gate;
 use crate::play::Player;
+use crate::play::key::Key;
 use device_query::{DeviceQuery, DeviceState, Keycode};
 use rodio::Sink;
 use std::{
