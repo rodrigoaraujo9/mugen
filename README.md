@@ -2,58 +2,66 @@
 <div align="center">
   <h3 align="center">mugen</h3>
   <p align="center">
-    A terminal-based synthesizer in Rust.
+      A terminal-based synth in Rust.
   </p>
 </div>
 
 <div align="center">
-  <img src="./assets/demo.gif" alt="Demo">
+    <img src="./assets/demo.gif" alt="Demo">
 </div>
 
 ## About
 
-This is a passion project to learn more about how synthesizers used in music composition and production work (mathematically) as well as dive into real-time systems in Rust. Synthesisers do a lot of compute and require that there is no noticeble latency from when keys are pressed or released to when the sound is played or stops. Therefore I am finding this quite a nice challenge!
+This is a passion project to learn more about how synthesizers used in music composition and production work (mathematically) as well as dive into real-time systems in Rust. Synthesizers do a lot of compute and require that there is no noticeable latency from when keys are pressed or released to when the sound is played or stops. Therefore I am finding this quite a nice challenge.
 
-You can play it live from your computer keyboard, layer notes, switch waveforms while holding notes, and tweak parameters in real time without rebuilding the modulation chain.
+You can play it live from your computer keyboard, switch waveforms as you go, mess with effects and layer notes like a real instrument. You can also create new wave sources and effects and mix them up easily.
 
 Right now it focuses on:
 
-- real-time sound generation
-- polyphonic playback
-- live waveform switching while notes are held
-- dynamic patch architecture with interchangeable generators and nodes
-- per-note ADSR amplitude envelopes
-- live LFO control
-- live low-pass filter control
-- real-time parameter changes while audio is running
-- real-time display of held keys
+- real-time sound generation  
+- polyphonic playing  
+- switching sound character while notes are held  
+- dynamic patch architecture with interchangeable generators and modules  
+- ADSR manipulation applied per note  
+- dynamic LFO manipulation supporting any kind of wave and any kind of application (amp for now)  
+- lowpass filtering with live parameter updates  
+- runtime state propagation through snapshots  
+- terminal UI controlling the engine in real time  
 
-## Available waveforms
+The current architecture keeps the patch modular while allowing the audio chain to be constructed only when a note is played, so parameters can be updated live without rebuilding the whole synth.
 
-- **Sine**
-- **Saw**
-- **Square**
-- **Triangle**
-- **Noise**
+## Why
 
-## How to play
+The goal is not only to make a synth, but to understand how proper modular systems behave internally:
 
-- Use the keyboard (`A–L` row + `W/E/T/Y/U/O/P`) like a small piano
-- Hold multiple keys to play chords
-- Use **Tab** to switch panels
-- Use **arrow keys** to select and change parameters
-- Use **Space** to switch between **LFO** and **LowPass** in the modulation panel
-- Press **Q** or **Ctrl+C** to quit
+- source generation  
+- modulation  
+- envelope shaping  
+- filtering  
+- state propagation  
+- live parameter control  
 
-## Architecture
+while keeping everything simple enough to extend cleanly.
 
-- **Generator** → produces the raw source signal
-- **Node** → transforms the signal (modulation, filtering, effects)
-- **Patch** → owns one generator and a dynamic chain of nodes
-- Generator and node parameters are shared live so the UI can update them while notes are playing
-- ADSR is applied per note, after the patch chain
+## Current direction
 
-## Screenshots
+The project is moving toward a more complete modular synth where modules remain interchangeable and the engine decides how to build the final chain at runtime.
 
-![Intro](assets/intro.png)
-![UI](assets/ui.png)
+That means:
+
+- generators stay independent  
+- modules stay reusable  
+- state stays synchronized  
+- UI reflects engine truth  
+
+## Stack
+
+- Rust  
+- rodio  
+- ratatui  
+- crossterm  
+- tokio  
+
+## Notes
+
+The goal is not to emulate a DAW or a full VST, but to build something closer to a real instrument that happens to live in the terminal.
