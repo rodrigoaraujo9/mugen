@@ -1,10 +1,10 @@
 //! Commands sent to the audio engine
 
-use crate::effects::adsr::Adsr;
-use crate::effects::gain::Gain;
-use crate::effects::lfo_amp::LfoAmp;
-use crate::effects::lowpass::LowPass;
-use crate::oscilators::basic::Wave;
+use crate::patch::effects::adsr::Adsr;
+use crate::patch::effects::gain::Gain;
+use crate::patch::effects::lfo_amp::LfoAmp;
+use crate::patch::effects::lowpass::LowPass;
+use crate::patch::oscilators::basic::Wave;
 
 #[derive(Debug, Clone, Copy)]
 pub enum Command {

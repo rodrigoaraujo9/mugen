@@ -1,7 +1,7 @@
 //! Shapes note amplitude over time using gate-controlled stages
 
+use crate::patch::shared::Shared;
 use crate::patch::{Gate, PatchSource};
-use crate::shared::Shared;
 use rodio::Source;
 use std::sync::atomic::Ordering;
 

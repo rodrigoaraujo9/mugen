@@ -1,7 +1,7 @@
 //! Attenuates high frequencies with shared cutoff control
 
+use crate::patch::shared::Shared;
 use crate::patch::{Effect, PatchSource};
-use crate::shared::Shared;
 use std::f32::consts::TAU;
 
 #[derive(Debug, Clone, Copy)]

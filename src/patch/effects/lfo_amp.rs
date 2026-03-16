@@ -2,8 +2,8 @@
 
 use crate::patch::effects::lfo::LfoOsc;
 use crate::patch::oscilators::basic::Wave;
+use crate::patch::shared::Shared;
 use crate::patch::{Effect, PatchSource};
-use crate::shared::Shared;
 
 #[derive(Debug, Clone, Copy)]
 pub struct LfoAmp {

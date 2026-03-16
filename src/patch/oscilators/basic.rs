@@ -2,7 +2,7 @@
 
 use crate::config::{AMP_DEFAULT, SAMPLE_RATE};
 use crate::patch::Sample;
-use crate::shared::Shared;
+use crate::patch::shared::Shared;
 use rodio::Source;
 use std::f32::consts::TAU;
 use std::time::Duration;

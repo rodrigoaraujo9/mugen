@@ -2,6 +2,7 @@
 
 pub mod effects;
 pub mod oscilators;
+pub mod shared;
 
 use rodio::Source;
 use std::sync::Arc;

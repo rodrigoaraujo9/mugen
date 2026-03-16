@@ -1,7 +1,7 @@
 //! Scales signal amplitude using shared live control
 
+use crate::patch::shared::Shared;
 use crate::patch::{Effect, PatchSource};
-use crate::shared::Shared;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Gain {

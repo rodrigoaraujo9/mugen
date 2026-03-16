@@ -5,11 +5,11 @@ use crate::config::{
     ADSR_ATTACK_S, ADSR_DECAY_S, ADSR_RELEASE_S, ADSR_SUSTAIN, CUTOFF, LFO_DEPTH, LFO_KIND,
     LFO_RATE_HZ,
 };
-use crate::effects::adsr::Adsr;
-use crate::effects::gain::Gain;
-use crate::effects::lfo_amp::LfoAmp;
-use crate::effects::lowpass::LowPass;
-use crate::oscilators::basic::Wave;
+use crate::patch::effects::adsr::Adsr;
+use crate::patch::effects::gain::Gain;
+use crate::patch::effects::lfo_amp::LfoAmp;
+use crate::patch::effects::lowpass::LowPass;
+use crate::patch::oscilators::basic::Wave;
 use device_query::Keycode;
 use std::collections::HashSet;
 use tokio::sync::{Mutex, OnceCell, mpsc, watch};
