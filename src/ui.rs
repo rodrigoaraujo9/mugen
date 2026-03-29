@@ -214,7 +214,7 @@ impl UiState {
 
     #[inline]
     fn selected_wave(&self) -> Wave {
-        self.waves[self.wave_idx]
+        self.waves[self.wave_idx].clone()
     }
 
     #[inline]
@@ -399,11 +399,11 @@ fn handle_adsr(ui: &mut UiState, client: &Client, key: KeyEvent) {
         KeyCode::Down if ui.adsr_param_idx + 1 < AdsrParam::ALL.len() => ui.adsr_param_idx += 1,
         KeyCode::Left => {
             tweak_adsr(ui, -1);
-            client.set_adsr(ui.adsr);
+            client.set_adsr(ui.adsr.clone());
         }
         KeyCode::Right => {
             tweak_adsr(ui, 1);
-            client.set_adsr(ui.adsr);
+            client.set_adsr(ui.adsr.clone());
         }
         _ => {}
     }
@@ -430,22 +430,22 @@ fn handle_mod(ui: &mut UiState, client: &Client, key: KeyEvent) {
         KeyCode::Left => match ui.mod_tab {
             ModTab::Lfo => {
                 tweak_lfo(ui, -1);
-                client.set_lfo_amp(ui.lfo);
+                client.set_lfo_amp(ui.lfo.clone());
             }
             ModTab::LowPass => {
                 tweak_lowpass(ui, -1);
-                client.set_lowpass(ui.lowpass);
+                client.set_lowpass(ui.lowpass.clone());
             }
         },
 
         KeyCode::Right => match ui.mod_tab {
             ModTab::Lfo => {
                 tweak_lfo(ui, 1);
-                client.set_lfo_amp(ui.lfo);
+                client.set_lfo_amp(ui.lfo.clone());
             }
             ModTab::LowPass => {
                 tweak_lowpass(ui, 1);
-                client.set_lowpass(ui.lowpass);
+                client.set_lowpass(ui.lowpass.clone());
             }
         },
 
@@ -483,7 +483,7 @@ fn tweak_lfo(ui: &mut UiState, dir: i32) {
     let dir = if dir < 0 { -1 } else { 1 };
 
     match ui.selected_lfo_param() {
-        LfoParam::Kind => ui.lfo.wave = next_wave(ui.lfo.wave, dir),
+        LfoParam::Kind => ui.lfo.wave = next_wave(ui.lfo.wave.clone(), dir),
         LfoParam::RateHz => {
             ui.lfo.rate_hz = (ui.lfo.rate_hz + dir as f32 * 0.25).clamp(0.05, 40.0);
         }
@@ -525,7 +525,7 @@ fn next_wave(wave: Wave, dir: i32) -> Wave {
     ];
 
     let idx = ALL.iter().position(|w| *w == wave).unwrap_or(0) as i32;
-    ALL[(idx + dir).rem_euclid(ALL.len() as i32) as usize]
+    ALL[(idx + dir).rem_euclid(ALL.len() as i32) as usize].clone()
 }
 
 fn draw_intro(f: &mut ratatui::Frame) {
@@ -748,7 +748,7 @@ fn draw_waveforms(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
     let block = panel_block("waveforms", focused);
 
     let mut lines = vec![Line::from("")];
-    for (i, wave) in ui.waves.iter().copied().enumerate() {
+    for (i, wave) in ui.waves.clone().iter().enumerate() {
         lines.push(simple_select_line(i == ui.wave_idx, wave.name()));
     }
 

@@ -3,7 +3,7 @@
 use crate::patch::shared::Shared;
 use crate::patch::{Effect, PatchSource};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Gain {
     pub amount: f32,
 }

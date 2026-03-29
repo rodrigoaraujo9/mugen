@@ -7,7 +7,7 @@ use rodio::Source;
 use std::f32::consts::TAU;
 use std::time::Duration;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Wave {
     Sine,
     Saw,
@@ -18,7 +18,7 @@ pub enum Wave {
 
 impl Wave {
     #[inline]
-    pub fn toggle(self) -> Self {
+    pub fn toggle(&self) -> Self {
         match self {
             Self::Sine => Self::Saw,
             Self::Saw => Self::Square,
@@ -29,7 +29,7 @@ impl Wave {
     }
 
     #[inline]
-    pub fn name(self) -> &'static str {
+    pub fn name(&self) -> &'static str {
         match self {
             Self::Sine => "Sine",
             Self::Saw => "Saw",
@@ -40,7 +40,7 @@ impl Wave {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Osc {
     pub wave: Wave,
     pub amplitude: f32,

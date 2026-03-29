@@ -4,7 +4,7 @@ use crate::patch::shared::Shared;
 use crate::patch::{Effect, PatchSource};
 use std::f32::consts::TAU;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct LowPass {
     pub cutoff_hz: f32,
 }

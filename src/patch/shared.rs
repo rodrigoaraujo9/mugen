@@ -18,9 +18,9 @@ impl<T> Shared<T> {
     #[inline]
     pub fn get(&self) -> T
     where
-        T: Copy,
+        T: Clone,
     {
-        *self.inner.read().expect("shared read poisoned")
+        self.inner.read().expect("shared read poisoned").clone()
     }
 
     #[inline]

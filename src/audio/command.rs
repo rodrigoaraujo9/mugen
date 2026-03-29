@@ -6,7 +6,7 @@ use crate::patch::effects::lfo_amp::LfoAmp;
 use crate::patch::effects::lowpass::LowPass;
 use crate::patch::oscilators::basic::Wave;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum Command {
     SetVolume(f32),
     SetMuted(bool),

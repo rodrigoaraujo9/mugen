@@ -5,7 +5,7 @@ use crate::patch::oscilators::basic::Wave;
 use crate::patch::shared::Shared;
 use crate::patch::{Effect, PatchSource};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct LfoAmp {
     pub wave: Wave,
     pub rate_hz: f32,

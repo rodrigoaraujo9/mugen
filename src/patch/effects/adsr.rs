@@ -5,7 +5,7 @@ use crate::patch::{Gate, PatchSource};
 use rodio::Source;
 use std::sync::atomic::Ordering;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct Adsr {
     pub attack_s: f32,
     pub decay_s: f32,
@@ -38,7 +38,7 @@ pub fn adsr(input: PatchSource, adsr: AdsrHandle, gate: Gate) -> PatchSource {
     Box::new(AdsrSource::new(input, adsr, gate, sr))
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Stage {
     Attack,
     Decay,
