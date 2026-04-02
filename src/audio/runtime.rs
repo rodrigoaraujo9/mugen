@@ -67,7 +67,7 @@ pub async fn run(
     focused: Arc<AtomicBool>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let _ = audio::client().await;
-    let (mut cmd_rx, snapshot_tx, held_keys_tx, initial) = audio::take_engine_channels().await;
+    let (mut cmd_rx, snapshot_tx, held_keys_tx, initial) = audio::take_runtime_channels().await;
 
     let mut state = State::from_snapshot(initial);
     let mut player = Player::new()?;

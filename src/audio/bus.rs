@@ -1,15 +1,6 @@
 //! Shared audio bus that owns the engine channels and singleton client access
 
 use crate::audio::{Client, Command, Snapshot};
-use crate::config::{
-    ADSR_ATTACK_S, ADSR_DECAY_S, ADSR_RELEASE_S, ADSR_SUSTAIN, CUTOFF, LFO_DEPTH, LFO_KIND,
-    LFO_RATE_HZ,
-};
-use crate::patch::effects::adsr::Adsr;
-use crate::patch::effects::gain::Gain;
-use crate::patch::effects::lfo_amp::LfoAmp;
-use crate::patch::effects::lowpass::LowPass;
-use crate::patch::oscilators::basic::Wave;
 use device_query::Keycode;
 use std::collections::HashSet;
 use tokio::sync::{Mutex, OnceCell, mpsc, watch};
@@ -23,31 +14,12 @@ pub struct Bus {
 
 static AUDIO: OnceCell<Bus> = OnceCell::const_new();
 
-fn initial_snapshot() -> Snapshot {
-    Snapshot {
-        volume: 1.0,
-        muted: false,
-        wave: Wave::Sine,
-        octave: 0,
-        patch_name: Wave::Sine.name().to_string(),
-        adsr: Adsr::new(ADSR_ATTACK_S, ADSR_DECAY_S, ADSR_SUSTAIN, ADSR_RELEASE_S),
-        gain: Gain { amount: 1.0 },
-        lfo_amp: LfoAmp {
-            wave: LFO_KIND,
-            rate_hz: LFO_RATE_HZ,
-            depth: LFO_DEPTH,
-            base_gain: 1.0,
-        },
-        lowpass: LowPass { cutoff_hz: CUTOFF },
-    }
-}
-
 pub async fn client() -> &'static Client {
     &AUDIO
         .get_or_init(|| async {
             let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
 
-            let snapshot = initial_snapshot();
+            let snapshot = Snapshot::default();
             let (snapshot_tx, snapshot_rx) = watch::channel(snapshot);
             let (held_keys_tx, held_keys_rx) = watch::channel(HashSet::<Keycode>::new());
 
@@ -62,7 +34,7 @@ pub async fn client() -> &'static Client {
         .client
 }
 
-pub async fn take_engine_channels() -> (
+pub async fn take_runtime_channels() -> (
     mpsc::UnboundedReceiver<Command>,
     watch::Sender<Snapshot>,
     watch::Sender<HashSet<Keycode>>,
