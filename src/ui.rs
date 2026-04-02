@@ -37,6 +37,13 @@ use crate::patch::effects::lfo_amp::LfoAmp;
 use crate::patch::effects::lowpass::LowPass;
 use crate::patch::oscilators::basic::Wave;
 
+const INTRO_MIN_W: u16 = 136;
+const INTRO_MIN_H: u16 = 25;
+const UI_MIN_W: u16 = 136;
+const UI_MIN_H: u16 = 33;
+const KEYBOARD_MIN_W: u16 = 18;
+const KEYBOARD_MIN_H: u16 = 6;
+
 #[allow(dead_code)]
 mod kdr {
     use ratatui::style::Color;
@@ -70,6 +77,7 @@ enum Pane {
 }
 
 impl Pane {
+    #[must_use]
     fn next(self) -> Self {
         match self {
             Self::Waveforms => Self::Adsr,
@@ -87,6 +95,7 @@ enum ModTab {
 }
 
 impl ModTab {
+    #[must_use]
     fn next(self) -> Self {
         match self {
             Self::Lfo => Self::LowPass,
@@ -106,6 +115,7 @@ enum AdsrParam {
 impl AdsrParam {
     const ALL: [Self; 4] = [Self::Attack, Self::Decay, Self::Sustain, Self::Release];
 
+    #[must_use]
     fn label_and_hint(self) -> (&'static str, &'static str) {
         match self {
             Self::Attack => ("Attack", "(s)"),
@@ -126,6 +136,7 @@ enum LfoParam {
 impl LfoParam {
     const ALL: [Self; 3] = [Self::Kind, Self::RateHz, Self::Depth];
 
+    #[must_use]
     fn label_and_hint(self) -> (&'static str, &'static str) {
         match self {
             Self::Kind => ("Wave", ""),
@@ -143,6 +154,7 @@ enum LowPassParam {
 impl LowPassParam {
     const ALL: [Self; 1] = [Self::CutoffHz];
 
+    #[must_use]
     fn label_and_hint(self) -> (&'static str, &'static str) {
         match self {
             Self::CutoffHz => ("Cutoff", "(Hz)"),
@@ -176,6 +188,7 @@ struct UiState {
 }
 
 impl UiState {
+    #[must_use]
     fn new(snapshot: Snapshot) -> Self {
         let waves = [
             Wave::Sine,
@@ -212,22 +225,22 @@ impl UiState {
         }
     }
 
-    #[inline]
+    #[must_use]
     fn selected_wave(&self) -> Wave {
         self.waves[self.wave_idx].clone()
     }
 
-    #[inline]
+    #[must_use]
     fn selected_adsr_param(&self) -> AdsrParam {
         AdsrParam::ALL[self.adsr_param_idx]
     }
 
-    #[inline]
+    #[must_use]
     fn selected_lfo_param(&self) -> LfoParam {
         LfoParam::ALL[self.lfo_param_idx]
     }
 
-    #[inline]
+    #[must_use]
     fn selected_lowpass_param(&self) -> LowPassParam {
         LowPassParam::ALL[self.lowpass_param_idx]
     }
@@ -251,6 +264,7 @@ impl UiState {
     }
 }
 
+#[allow(clippy::missing_errors_doc)]
 pub async fn run_ui(
     client: Client,
     shutdown_tx: watch::Sender<bool>,
@@ -294,13 +308,13 @@ pub async fn run_ui(
             }
 
             _ = held_keys_rx.changed() => {
-                ui.held_keys = held_keys_rx.borrow().clone();
+                ui.held_keys.clone_from(&held_keys_rx.borrow());
             }
 
             key = key_rx.recv() => {
                 let Some(key) = key else { break; };
 
-                if should_quit(key) {
+                if should_quit(&key) {
                     let _ = shutdown_tx.send(true);
                     break;
                 }
@@ -315,14 +329,14 @@ pub async fn run_ui(
                 }
 
                 match ui.pane {
-                    Pane::Waveforms => handle_waveforms(&mut ui, &client, key),
-                    Pane::Adsr => handle_adsr(&mut ui, &client, key),
-                    Pane::Mod => handle_mod(&mut ui, &client, key),
-                    Pane::Keyboard => handle_keyboard(&mut ui, &client, key),
+                    Pane::Waveforms => handle_waveforms(&mut ui, &client, &key),
+                    Pane::Adsr => handle_adsr(&mut ui, &client, &key),
+                    Pane::Mod => handle_mod(&mut ui, &client, &key),
+                    Pane::Keyboard => handle_keyboard(&mut ui, &client, &key),
                 }
             }
 
-            _ = sleep(Duration::from_millis(16)) => {}
+            () = sleep(Duration::from_millis(16)) => {}
         }
     }
 
@@ -374,12 +388,13 @@ fn draw_frame(
     Ok(())
 }
 
-fn should_quit(key: KeyEvent) -> bool {
+#[must_use]
+fn should_quit(key: &KeyEvent) -> bool {
     (key.modifiers.contains(KeyModifiers::CONTROL) && matches!(key.code, KeyCode::Char('c')))
         || matches!(key.code, KeyCode::Char('q'))
 }
 
-fn handle_waveforms(ui: &mut UiState, client: &Client, key: KeyEvent) {
+fn handle_waveforms(ui: &mut UiState, client: &Client, key: &KeyEvent) {
     let prev = ui.wave_idx;
 
     match key.code {
@@ -393,7 +408,7 @@ fn handle_waveforms(ui: &mut UiState, client: &Client, key: KeyEvent) {
     }
 }
 
-fn handle_adsr(ui: &mut UiState, client: &Client, key: KeyEvent) {
+fn handle_adsr(ui: &mut UiState, client: &Client, key: &KeyEvent) {
     match key.code {
         KeyCode::Up if ui.adsr_param_idx > 0 => ui.adsr_param_idx -= 1,
         KeyCode::Down if ui.adsr_param_idx + 1 < AdsrParam::ALL.len() => ui.adsr_param_idx += 1,
@@ -409,7 +424,7 @@ fn handle_adsr(ui: &mut UiState, client: &Client, key: KeyEvent) {
     }
 }
 
-fn handle_mod(ui: &mut UiState, client: &Client, key: KeyEvent) {
+fn handle_mod(ui: &mut UiState, client: &Client, key: &KeyEvent) {
     match key.code {
         KeyCode::Char(' ') => ui.mod_tab = ui.mod_tab.next(),
 
@@ -422,7 +437,7 @@ fn handle_mod(ui: &mut UiState, client: &Client, key: KeyEvent) {
         KeyCode::Down => match ui.mod_tab {
             ModTab::Lfo if ui.lfo_param_idx + 1 < LfoParam::ALL.len() => ui.lfo_param_idx += 1,
             ModTab::LowPass if ui.lowpass_param_idx + 1 < LowPassParam::ALL.len() => {
-                ui.lowpass_param_idx += 1
+                ui.lowpass_param_idx += 1;
             }
             _ => {}
         },
@@ -453,7 +468,7 @@ fn handle_mod(ui: &mut UiState, client: &Client, key: KeyEvent) {
     }
 }
 
-fn handle_keyboard(ui: &mut UiState, client: &Client, key: KeyEvent) {
+fn handle_keyboard(ui: &mut UiState, client: &Client, key: &KeyEvent) {
     match key.code {
         KeyCode::Right if ui.octave < 4 => {
             ui.octave += 1;
@@ -480,21 +495,22 @@ fn tweak_adsr(ui: &mut UiState, dir: i32) {
 }
 
 fn tweak_lfo(ui: &mut UiState, dir: i32) {
-    let dir = if dir < 0 { -1 } else { 1 };
+    let dir_i = if dir < 0 { -1 } else { 1 };
+    let dir_f = if dir_i < 0 { -1.0 } else { 1.0 };
 
     match ui.selected_lfo_param() {
-        LfoParam::Kind => ui.lfo.wave = next_wave(ui.lfo.wave.clone(), dir),
+        LfoParam::Kind => ui.lfo.wave = next_wave(&ui.lfo.wave, dir_i),
         LfoParam::RateHz => {
-            ui.lfo.rate_hz = (ui.lfo.rate_hz + dir as f32 * 0.25).clamp(0.05, 40.0);
+            ui.lfo.rate_hz = (ui.lfo.rate_hz + dir_f * 0.25).clamp(0.05, 40.0);
         }
         LfoParam::Depth => {
-            ui.lfo.depth = (ui.lfo.depth + dir as f32 * 0.02).clamp(0.0, 1.0);
+            ui.lfo.depth = (ui.lfo.depth + dir_f * 0.02).clamp(0.0, 1.0);
         }
     }
 }
 
 fn tweak_lowpass(ui: &mut UiState, dir: i32) {
-    let dir = if dir < 0 { -1.0 } else { 1.0 };
+    let dir_f = if dir < 0 { -1.0 } else { 1.0 };
 
     match ui.selected_lowpass_param() {
         LowPassParam::CutoffHz => {
@@ -510,12 +526,13 @@ fn tweak_lowpass(ui: &mut UiState, dir: i32) {
                 250.0
             };
 
-            ui.lowpass.cutoff_hz = (cutoff + dir * step).clamp(20.0, 20_000.0);
+            ui.lowpass.cutoff_hz = (cutoff + dir_f * step).clamp(20.0, 20_000.0);
         }
     }
 }
 
-fn next_wave(wave: Wave, dir: i32) -> Wave {
+#[must_use]
+fn next_wave(wave: &Wave, dir: i32) -> Wave {
     const ALL: [Wave; 5] = [
         Wave::Sine,
         Wave::Saw,
@@ -524,18 +541,19 @@ fn next_wave(wave: Wave, dir: i32) -> Wave {
         Wave::Noise,
     ];
 
-    let idx = ALL.iter().position(|w| *w == wave).unwrap_or(0) as i32;
-    ALL[(idx + dir).rem_euclid(ALL.len() as i32) as usize].clone()
+    let len = usize_to_i32(ALL.len());
+    let idx = usize_to_i32(ALL.iter().position(|w| w == wave).unwrap_or(0));
+    let next_idx = (idx + dir).rem_euclid(len);
+    let next_idx = i32_to_usize(next_idx);
+
+    ALL[next_idx].clone()
 }
 
 fn draw_intro(f: &mut ratatui::Frame) {
     let area = f.area();
 
-    const MIN_W: u16 = 136;
-    const MIN_H: u16 = 25;
-
-    if area.width < MIN_W || area.height < MIN_H {
-        draw_too_small(f, area, MIN_W, MIN_H);
+    if area.width < INTRO_MIN_W || area.height < INTRO_MIN_H {
+        draw_too_small(f, area, INTRO_MIN_W, INTRO_MIN_H);
         return;
     }
 
@@ -570,7 +588,7 @@ fn draw_intro(f: &mut ratatui::Frame) {
     let lines: Vec<Line> = art
         .iter()
         .map(|s| {
-            let mut owned = s.to_string();
+            let mut owned = (*s).to_string();
             let pad = max_w.saturating_sub(owned.chars().count());
             if pad > 0 {
                 owned.extend(std::iter::repeat_n(' ', pad));
@@ -585,21 +603,21 @@ fn draw_intro(f: &mut ratatui::Frame) {
     let inner = outer.inner(area);
     f.render_widget(outer, area);
 
-    let total_h = art.len() as u16;
-    let y = inner.y + (inner.height.saturating_sub(total_h)) / 2;
+    let total_h = usize_to_u16(art.len());
+    let y = inner.y + inner.height.saturating_sub(total_h) / 2;
 
     let main_area = Rect {
         x: inner.x,
         y,
         width: inner.width,
-        height: (total_h - 1).min(inner.height),
+        height: total_h.saturating_sub(1).min(inner.height),
     };
 
     f.render_widget(
         Paragraph::new(
             lines
                 .into_iter()
-                .take((total_h - 1) as usize)
+                .take(u16_to_usize(total_h.saturating_sub(1)))
                 .collect::<Vec<_>>(),
         )
         .alignment(Alignment::Center)
@@ -608,7 +626,7 @@ fn draw_intro(f: &mut ratatui::Frame) {
         main_area,
     );
 
-    let synth_y = y + total_h - 1;
+    let synth_y = y + total_h.saturating_sub(1);
     if synth_y < inner.y + inner.height {
         let synth_area = Rect {
             x: inner.x,
@@ -632,11 +650,8 @@ fn draw_intro(f: &mut ratatui::Frame) {
 fn draw_ui(f: &mut ratatui::Frame, ui: &UiState) {
     let area = f.area();
 
-    const MIN_W: u16 = 136;
-    const MIN_H: u16 = 33;
-
-    if area.width < MIN_W || area.height < MIN_H {
-        draw_too_small(f, area, MIN_W, MIN_H);
+    if area.width < UI_MIN_W || area.height < UI_MIN_H {
+        draw_too_small(f, area, UI_MIN_W, UI_MIN_H);
         return;
     }
 
@@ -697,14 +712,14 @@ fn draw_too_small(f: &mut ratatui::Frame, area: Rect, min_w: u16, min_h: u16) {
         )),
         Line::from(Span::styled(
             format!(
-                "need {}×{}  —  currently {}×{}",
-                min_w, min_h, area.width, area.height
+                "need {min_w}×{min_h}  —  currently {}×{}",
+                area.width, area.height
             ),
             Style::default().fg(kdr::MUTED),
         )),
     ];
 
-    let h = msg.len() as u16;
+    let h = usize_to_u16(msg.len());
     let y = inner.y + inner.height.saturating_sub(h) / 2;
 
     f.render_widget(
@@ -726,7 +741,7 @@ fn draw_logo(f: &mut ratatui::Frame, area: Rect) {
         Line::from(Span::styled("限", Style::default().fg(kdr::FG)).bold()),
     ];
 
-    let total_h = lines.len() as u16;
+    let total_h = usize_to_u16(lines.len());
     let y = area.y + area.height.saturating_sub(total_h) / 2;
 
     f.render_widget(
@@ -748,7 +763,7 @@ fn draw_waveforms(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
     let block = panel_block("waveforms", focused);
 
     let mut lines = vec![Line::from("")];
-    for (i, wave) in ui.waves.clone().iter().enumerate() {
+    for (i, wave) in ui.waves.iter().enumerate() {
         lines.push(simple_select_line(i == ui.wave_idx, wave.name()));
     }
 
@@ -775,7 +790,7 @@ fn draw_adsr(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
         };
         let (label, hint) = param.label_and_hint();
         kv_line(
-            area.width.saturating_sub(2) as usize,
+            u16_to_usize(area.width.saturating_sub(2)),
             i == ui.adsr_param_idx,
             label,
             hint,
@@ -865,7 +880,7 @@ fn draw_mod(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
                 };
                 let (label, hint) = param.label_and_hint();
                 lines.push(kv_line(
-                    inner.width as usize,
+                    u16_to_usize(inner.width),
                     i == ui.lfo_param_idx,
                     label,
                     hint,
@@ -880,7 +895,7 @@ fn draw_mod(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
                 };
                 let (label, hint) = param.label_and_hint();
                 lines.push(kv_line(
-                    inner.width as usize,
+                    u16_to_usize(inner.width),
                     i == ui.lowpass_param_idx,
                     label,
                     hint,
@@ -899,126 +914,118 @@ fn draw_mod(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
     );
 }
 
+struct WhiteKey {
+    code: Keycode,
+    label: &'static str,
+}
+
+struct BlackKey {
+    code: Keycode,
+    label: &'static str,
+    gap_after: usize,
+}
+
+struct KeyboardLayout {
+    x0: usize,
+    white_w: usize,
+    white_count: usize,
+    black_w: usize,
+    black_h: usize,
+}
+
+const WHITE_KEYS: [WhiteKey; 11] = [
+    WhiteKey {
+        code: Keycode::A,
+        label: "a",
+    },
+    WhiteKey {
+        code: Keycode::S,
+        label: "s",
+    },
+    WhiteKey {
+        code: Keycode::D,
+        label: "d",
+    },
+    WhiteKey {
+        code: Keycode::F,
+        label: "f",
+    },
+    WhiteKey {
+        code: Keycode::G,
+        label: "g",
+    },
+    WhiteKey {
+        code: Keycode::H,
+        label: "h",
+    },
+    WhiteKey {
+        code: Keycode::J,
+        label: "j",
+    },
+    WhiteKey {
+        code: Keycode::K,
+        label: "k",
+    },
+    WhiteKey {
+        code: Keycode::L,
+        label: "l",
+    },
+    WhiteKey {
+        code: Keycode::Semicolon,
+        label: ";",
+    },
+    WhiteKey {
+        code: Keycode::Apostrophe,
+        label: "'",
+    },
+];
+
+const BLACK_KEYS: [BlackKey; 7] = [
+    BlackKey {
+        code: Keycode::W,
+        label: "w",
+        gap_after: 0,
+    },
+    BlackKey {
+        code: Keycode::E,
+        label: "e",
+        gap_after: 1,
+    },
+    BlackKey {
+        code: Keycode::T,
+        label: "t",
+        gap_after: 3,
+    },
+    BlackKey {
+        code: Keycode::Y,
+        label: "y",
+        gap_after: 4,
+    },
+    BlackKey {
+        code: Keycode::U,
+        label: "u",
+        gap_after: 5,
+    },
+    BlackKey {
+        code: Keycode::O,
+        label: "o",
+        gap_after: 7,
+    },
+    BlackKey {
+        code: Keycode::P,
+        label: "p",
+        gap_after: 8,
+    },
+];
+
 fn draw_keyboard(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
-    struct WhiteKey {
-        code: Keycode,
-        label: &'static str,
-    }
-
-    struct BlackKey {
-        code: Keycode,
-        label: &'static str,
-        gap_after: usize,
-    }
-
-    let white_keys = [
-        WhiteKey {
-            code: Keycode::A,
-            label: "a",
-        },
-        WhiteKey {
-            code: Keycode::S,
-            label: "s",
-        },
-        WhiteKey {
-            code: Keycode::D,
-            label: "d",
-        },
-        WhiteKey {
-            code: Keycode::F,
-            label: "f",
-        },
-        WhiteKey {
-            code: Keycode::G,
-            label: "g",
-        },
-        WhiteKey {
-            code: Keycode::H,
-            label: "h",
-        },
-        WhiteKey {
-            code: Keycode::J,
-            label: "j",
-        },
-        WhiteKey {
-            code: Keycode::K,
-            label: "k",
-        },
-        WhiteKey {
-            code: Keycode::L,
-            label: "l",
-        },
-        WhiteKey {
-            code: Keycode::Semicolon,
-            label: ";",
-        },
-        WhiteKey {
-            code: Keycode::Apostrophe,
-            label: "'",
-        },
-    ];
-
-    let black_keys = [
-        BlackKey {
-            code: Keycode::W,
-            label: "w",
-            gap_after: 0,
-        },
-        BlackKey {
-            code: Keycode::E,
-            label: "e",
-            gap_after: 1,
-        },
-        BlackKey {
-            code: Keycode::T,
-            label: "t",
-            gap_after: 3,
-        },
-        BlackKey {
-            code: Keycode::Y,
-            label: "y",
-            gap_after: 4,
-        },
-        BlackKey {
-            code: Keycode::U,
-            label: "u",
-            gap_after: 5,
-        },
-        BlackKey {
-            code: Keycode::O,
-            label: "o",
-            gap_after: 7,
-        },
-        BlackKey {
-            code: Keycode::P,
-            label: "p",
-            gap_after: 8,
-        },
-    ];
-
     let bounds = area;
-    if bounds.width < 18 || bounds.height < 6 {
+    if bounds.width < KEYBOARD_MIN_W || bounds.height < KEYBOARD_MIN_H {
         return;
     }
 
     let focused = ui.pane == Pane::Keyboard;
-    let is_pressed = |code: &Keycode| ui.held_keys.contains(code);
-
-    let total_w = bounds.width as usize;
-    let total_h = bounds.height as usize;
-    let white_count = white_keys.len();
-
-    let white_w = (total_w / white_count).max(4);
-    let used_w = white_w * white_count;
-    let x0 = bounds.x as usize + (total_w.saturating_sub(used_w)) / 2;
-
-    let white_bg = if focused { kdr::FG } else { kdr::BORDER };
-    let white_fill = Style::default().bg(white_bg).fg(kdr::BG0);
-    let orange_fill = Style::default().bg(kdr::ORANGE).fg(kdr::BG0);
-    let sep_style = Style::default().fg(kdr::BG0).bg(white_bg);
-    let black_fill = Style::default().bg(kdr::BG0).fg(kdr::FG);
-    let black_pressed = Style::default().bg(kdr::ORANGE).fg(kdr::BG0);
-
+    let layout = keyboard_layout(bounds, WHITE_KEYS.len());
     let buf = f.buffer_mut();
 
     fill_rect(
@@ -1031,42 +1038,107 @@ fn draw_keyboard(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
         Style::default().bg(kdr::BG0),
     );
 
-    for (i, key) in white_keys.iter().enumerate() {
-        let x = (x0 + i * white_w) as u16;
+    draw_keyboard_white_keys(buf, bounds, ui, focused, &layout);
+    draw_keyboard_separators(buf, bounds, ui, focused, &layout);
+    draw_keyboard_white_labels(buf, bounds, ui, focused, &layout);
+    draw_keyboard_black_keys(buf, bounds, ui, &layout);
+}
+
+#[must_use]
+fn keyboard_layout(bounds: Rect, white_count: usize) -> KeyboardLayout {
+    let total_w = u16_to_usize(bounds.width);
+    let total_h = u16_to_usize(bounds.height);
+
+    let white_w = (total_w / white_count).max(4);
+    let used_w = white_w * white_count;
+    let x0 = u16_to_usize(bounds.x) + total_w.saturating_sub(used_w) / 2;
+
+    let black_h = ((total_h * 60) / 100).max(2);
+    let black_w = ((white_w * 55) / 100).max(2);
+
+    KeyboardLayout {
+        x0,
+        white_w,
+        white_count,
+        black_w,
+        black_h,
+    }
+}
+
+fn draw_keyboard_white_keys(
+    buf: &mut ratatui::buffer::Buffer,
+    bounds: Rect,
+    ui: &UiState,
+    focused: bool,
+    layout: &KeyboardLayout,
+) {
+    let white_bg = if focused { kdr::FG } else { kdr::BORDER };
+    let white_fill = Style::default().bg(white_bg).fg(kdr::BG0);
+    let orange_fill = Style::default().bg(kdr::ORANGE).fg(kdr::BG0);
+
+    for (i, key) in WHITE_KEYS.iter().enumerate() {
+        let x = usize_to_u16(layout.x0 + i * layout.white_w);
+        let style = if ui.held_keys.contains(&key.code) {
+            orange_fill
+        } else {
+            white_fill
+        };
+
         fill_rect(
             buf,
             bounds,
             x,
             bounds.y,
-            white_w as u16,
+            usize_to_u16(layout.white_w),
             bounds.height,
-            if is_pressed(&key.code) {
-                orange_fill
-            } else {
-                white_fill
-            },
+            style,
         );
     }
+}
 
-    for i in 0..(white_count - 1) {
-        let x = (x0 + (i + 1) * white_w - 1) as u16;
+fn draw_keyboard_separators(
+    buf: &mut ratatui::buffer::Buffer,
+    bounds: Rect,
+    ui: &UiState,
+    focused: bool,
+    layout: &KeyboardLayout,
+) {
+    let white_bg = if focused { kdr::FG } else { kdr::BORDER };
+    let orange_fill = Style::default().bg(kdr::ORANGE).fg(kdr::BG0);
+    let sep_style = Style::default().fg(kdr::BG0).bg(white_bg);
+
+    for i in 0..layout.white_count.saturating_sub(1) {
+        let x = usize_to_u16(layout.x0 + (i + 1) * layout.white_w - 1);
         vline(buf, bounds, x, bounds.y, bounds.height, '│', sep_style);
     }
 
-    for i in 0..(white_count - 1) {
-        if is_pressed(&white_keys[i].code) || is_pressed(&white_keys[i + 1].code) {
-            let x = (x0 + (i + 1) * white_w - 1) as u16;
+    for i in 0..layout.white_count.saturating_sub(1) {
+        if ui.held_keys.contains(&WHITE_KEYS[i].code)
+            || ui.held_keys.contains(&WHITE_KEYS[i + 1].code)
+        {
+            let x = usize_to_u16(layout.x0 + (i + 1) * layout.white_w - 1);
             fill_rect(buf, bounds, x, bounds.y, 1, bounds.height, orange_fill);
         }
     }
+}
 
-    let label_y = bounds.y + bounds.height - 1;
-    for (i, key) in white_keys.iter().enumerate() {
-        let x = (x0 + i * white_w) as u16;
-        let lx = x + white_w as u16 / 2;
+fn draw_keyboard_white_labels(
+    buf: &mut ratatui::buffer::Buffer,
+    bounds: Rect,
+    ui: &UiState,
+    focused: bool,
+    layout: &KeyboardLayout,
+) {
+    let white_bg = if focused { kdr::FG } else { kdr::BORDER };
+    let label_y = bounds.y + bounds.height.saturating_sub(1);
+    let half_white = usize_to_u16(layout.white_w) / 2;
+
+    for (i, key) in WHITE_KEYS.iter().enumerate() {
+        let x = usize_to_u16(layout.x0 + i * layout.white_w);
+        let lx = x + half_white;
 
         if lx >= bounds.x && lx < bounds.x + bounds.width {
-            let pressed = is_pressed(&key.code);
+            let pressed = ui.held_keys.contains(&key.code);
             let style = if pressed {
                 Style::default().fg(kdr::BG0).bg(kdr::ORANGE).bold()
             } else {
@@ -1078,19 +1150,27 @@ fn draw_keyboard(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
                 .set_style(style);
         }
     }
+}
 
-    let black_h = ((total_h * 60) / 100).max(2);
-    let black_w = ((white_w * 55) / 100).max(2);
+fn draw_keyboard_black_keys(
+    buf: &mut ratatui::buffer::Buffer,
+    bounds: Rect,
+    ui: &UiState,
+    layout: &KeyboardLayout,
+) {
+    let black_fill = Style::default().bg(kdr::BG0).fg(kdr::FG);
+    let black_pressed = Style::default().bg(kdr::ORANGE).fg(kdr::BG0);
 
-    for key in &black_keys {
-        let center_x = x0 + (key.gap_after + 1) * white_w;
-        let bx = center_x.saturating_sub(black_w / 2);
+    let w = usize_to_u16(layout.black_w);
+    let h = usize_to_u16(layout.black_h);
 
-        let x = bx as u16;
+    for key in &BLACK_KEYS {
+        let center_x = layout.x0 + (key.gap_after + 1) * layout.white_w;
+        let bx = center_x.saturating_sub(layout.black_w / 2);
+
+        let x = usize_to_u16(bx);
         let y = bounds.y;
-        let w = black_w as u16;
-        let h = black_h as u16;
-        let pressed = is_pressed(&key.code);
+        let pressed = ui.held_keys.contains(&key.code);
 
         fill_rect(
             buf,
@@ -1103,7 +1183,7 @@ fn draw_keyboard(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
         );
 
         let lx = x + w / 2;
-        let ly = y + h - 1;
+        let ly = y + h.saturating_sub(1);
         if lx >= bounds.x
             && lx < bounds.x + bounds.width
             && ly >= bounds.y
@@ -1185,6 +1265,7 @@ fn draw_help(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
     );
 }
 
+#[must_use]
 fn outer_block() -> Block<'static> {
     Block::default()
         .borders(Borders::ALL)
@@ -1192,6 +1273,7 @@ fn outer_block() -> Block<'static> {
         .style(Style::default().bg(kdr::BG0).fg(kdr::FG))
 }
 
+#[must_use]
 fn panel_block(title: &'static str, focused: bool) -> Block<'static> {
     Block::default()
         .borders(Borders::ALL)
@@ -1204,6 +1286,7 @@ fn panel_block(title: &'static str, focused: bool) -> Block<'static> {
         .style(Style::default().bg(kdr::BG0))
 }
 
+#[must_use]
 fn panel_style(focused: bool) -> Style {
     if focused {
         Style::default().fg(kdr::FG).bg(kdr::BG0)
@@ -1212,6 +1295,7 @@ fn panel_style(focused: bool) -> Style {
     }
 }
 
+#[must_use]
 fn tab_title(name: &'static str, focused: bool) -> Span<'static> {
     let title = format!(" {name} ");
     if focused {
@@ -1221,6 +1305,7 @@ fn tab_title(name: &'static str, focused: bool) -> Span<'static> {
     }
 }
 
+#[must_use]
 fn simple_select_line(selected: bool, text: &str) -> Line<'static> {
     if selected {
         Line::from(vec![
@@ -1235,6 +1320,7 @@ fn simple_select_line(selected: bool, text: &str) -> Line<'static> {
     }
 }
 
+#[must_use]
 fn kv_line(width: usize, selected: bool, label: &str, hint: &str, value: &str) -> Line<'static> {
     let prefix = if selected { "› " } else { "  " };
     let left_label = format!("{label} ");
@@ -1323,4 +1409,24 @@ fn vline(
     for yy in ymin..ymax {
         buf[(x, yy)].set_char(ch).set_style(style);
     }
+}
+
+#[must_use]
+fn usize_to_u16(value: usize) -> u16 {
+    u16::try_from(value).unwrap_or(u16::MAX)
+}
+
+#[must_use]
+fn usize_to_i32(value: usize) -> i32 {
+    i32::try_from(value).unwrap_or(i32::MAX)
+}
+
+#[must_use]
+fn i32_to_usize(value: i32) -> usize {
+    usize::try_from(value).unwrap_or(0)
+}
+
+#[must_use]
+fn u16_to_usize(value: u16) -> usize {
+    usize::from(value)
 }

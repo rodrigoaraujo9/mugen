@@ -67,10 +67,12 @@ impl Client {
         self.send(Command::SetOctave(octave));
     }
 
+    #[must_use] 
     pub fn subscribe(&self) -> watch::Receiver<Snapshot> {
         self.snapshot_rx.clone()
     }
 
+    #[must_use] 
     pub fn subscribe_held_keys(&self) -> watch::Receiver<HashSet<Keycode>> {
         self.held_keys_rx.clone()
     }

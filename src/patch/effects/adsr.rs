@@ -15,6 +15,7 @@ pub struct Adsr {
 
 impl Adsr {
     #[inline]
+    #[must_use] 
     pub fn new(attack_s: f32, decay_s: f32, sustain: f32, release_s: f32) -> Self {
         Self {
             attack_s,
@@ -28,6 +29,7 @@ impl Adsr {
 pub type AdsrHandle = Shared<Adsr>;
 
 #[inline]
+#[must_use] 
 pub fn make_adsr(adsr: Adsr) -> AdsrHandle {
     Shared::new(adsr)
 }

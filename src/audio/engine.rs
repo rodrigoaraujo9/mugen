@@ -28,7 +28,7 @@ fn publish_snapshot(tx: &tokio::sync::watch::Sender<Snapshot>, state: &State) {
     let _ = tx.send(state.snapshot());
 }
 
-async fn start_note(player: &mut Player, state: &State, keycode: Keycode) {
+fn start_note(player: &mut Player, state: &State, keycode: Keycode) {
     let Some(key) = Key::from_keycode(keycode) else {
         return;
     };
@@ -47,13 +47,13 @@ async fn start_note(player: &mut Player, state: &State, keycode: Keycode) {
     player.add_voice(keycode, sink, gate);
 }
 
-async fn restart_held_notes(player: &mut Player, state: &State) {
+fn restart_held_notes(player: &mut Player, state: &State) {
     let held: Vec<_> = state.held_keys.iter().copied().collect();
 
     player.kill_all();
 
     for key in held {
-        start_note(player, state, key).await;
+        start_note(player, state, key);
     }
 }
 
@@ -152,17 +152,17 @@ pub async fn run(
                     let prev: HashSet<Keycode> =
                         last_keys.iter().copied().filter(|k| *k != Keycode::B).collect();
 
-                    state.held_keys = now.clone();
+                    state.held_keys.clone_from(&now);
                     let _ = held_keys_tx.send(state.held_keys.clone());
 
                     if toggle_b {
                         toggle_wave(&state);
                         publish_snapshot(&snapshot_tx, &state);
-                        restart_held_notes(&mut player, &state).await;
+                        restart_held_notes(&mut player, &state);
                     }
 
                     for key in now.difference(&prev) {
-                        start_note(&mut player, &state, *key).await;
+                        start_note(&mut player, &state, *key);
                     }
 
                     for key in prev.difference(&now) {
@@ -191,7 +191,7 @@ pub async fn run(
 
                     Command::SetWave(wave) => {
                         state.set_wave(wave);
-                        restart_held_notes(&mut player, &state).await;
+                        restart_held_notes(&mut player, &state);
                     }
 
                     Command::SetAdsr(adsr) => {
@@ -212,7 +212,7 @@ pub async fn run(
 
                     Command::SetOctave(octave) => {
                         state.octave = octave;
-                        restart_held_notes(&mut player, &state).await;
+                        restart_held_notes(&mut player, &state);
                     }
                 }
 

@@ -38,16 +38,19 @@ impl Note {
     ];
 
     #[inline]
+    #[must_use] 
     pub const fn semitone(self) -> i32 {
         self as i32
     }
 
     #[inline]
+    #[must_use] 
     pub const fn from_semitone(semitone: i32) -> Self {
         Self::ALL[semitone.rem_euclid(SEMITONES_PER_OCTAVE) as usize]
     }
 
     #[inline]
+    #[must_use] 
     pub const fn name(self) -> &'static str {
         match self {
             Note::C => "C",
@@ -74,22 +77,26 @@ pub struct Key {
 
 impl Key {
     #[inline]
+    #[must_use] 
     pub const fn new(note: Note, octave: i32) -> Self {
         Self { note, octave }
     }
 
     #[inline]
+    #[must_use] 
     pub const fn absolute_semitone(self) -> i32 {
         self.octave * SEMITONES_PER_OCTAVE + self.note.semitone()
     }
 
     #[inline]
+    #[must_use] 
     pub fn frequency(self) -> f32 {
         let diff = self.absolute_semitone() - A4_SEMITONES;
         BASE_FREQ * 2.0f32.powf(diff as f32 / 12.0)
     }
 
     #[inline]
+    #[must_use]
     pub const fn transpose(self, semitones: i32) -> Self {
         let absolute = self.absolute_semitone() + semitones;
         let octave = absolute.div_euclid(SEMITONES_PER_OCTAVE);
@@ -97,6 +104,7 @@ impl Key {
         Self { note, octave }
     }
 
+    #[must_use]
     pub fn from_keycode(keycode: Keycode) -> Option<Self> {
         let base = KEYBOARD_BASE_OCTAVE;
 

@@ -16,6 +16,7 @@ pub struct LfoAmp {
 pub type LfoAmpHandle = Shared<LfoAmp>;
 
 #[inline]
+#[must_use] 
 pub fn make_lfo_amp(lfo: LfoAmp) -> LfoAmpHandle {
     Shared::new(LfoAmp {
         wave: lfo.wave,

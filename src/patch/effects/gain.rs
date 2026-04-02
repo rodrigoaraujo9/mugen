@@ -11,6 +11,7 @@ pub struct Gain {
 pub type GainHandle = Shared<Gain>;
 
 #[inline]
+#[must_use] 
 pub fn make_gain(amount: f32) -> GainHandle {
     Shared::new(Gain {
         amount: amount.max(0.0),

@@ -12,7 +12,8 @@ pub struct LowPass {
 pub type LowPassHandle = Shared<LowPass>;
 
 #[inline]
-pub fn make_lowpass(lowpass: LowPass) -> LowPassHandle {
+#[must_use] 
+pub fn make_lowpass(lowpass: &LowPass) -> LowPassHandle {
     Shared::new(LowPass {
         cutoff_hz: lowpass.cutoff_hz.max(1.0),
     })

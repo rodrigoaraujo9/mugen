@@ -18,6 +18,7 @@ pub enum Wave {
 
 impl Wave {
     #[inline]
+    #[must_use] 
     pub fn toggle(&self) -> Self {
         match self {
             Self::Sine => Self::Saw,
@@ -29,6 +30,7 @@ impl Wave {
     }
 
     #[inline]
+    #[must_use] 
     pub fn name(&self) -> &'static str {
         match self {
             Self::Sine => "Sine",
@@ -60,6 +62,7 @@ impl Default for Osc {
 pub type OscHandle = Shared<Osc>;
 
 #[inline]
+#[must_use] 
 pub fn make_osc(wave: Wave) -> OscHandle {
     Shared::new(Osc {
         wave,
@@ -68,6 +71,7 @@ pub fn make_osc(wave: Wave) -> OscHandle {
 }
 
 #[inline]
+#[must_use] 
 pub fn osc_source(frequency: f32, osc: OscHandle) -> OscSource {
     OscSource::new(frequency, osc)
 }
@@ -80,6 +84,7 @@ pub struct OscSource {
 }
 
 impl OscSource {
+    #[must_use] 
     pub fn new(frequency: f32, osc: OscHandle) -> Self {
         Self {
             osc,

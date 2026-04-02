@@ -5,6 +5,7 @@ use device_query::Keycode;
 use rodio::Sink;
 use rodio::stream::{OutputStream, OutputStreamBuilder};
 use std::collections::HashMap;
+use std::error::Error;
 use std::sync::atomic::Ordering;
 
 pub type ActiveVoice = (Sink, Gate);
@@ -15,7 +16,7 @@ pub struct Player {
 }
 
 impl Player {
-    pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new() -> Result<Self, Box<dyn Error>> {
         Ok(Self {
             stream: OutputStreamBuilder::open_default_stream()?,
             voices: HashMap::new(),

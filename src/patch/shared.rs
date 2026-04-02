@@ -16,6 +16,7 @@ impl<T> Shared<T> {
     }
 
     #[inline]
+    #[must_use] 
     pub fn get(&self) -> T
     where
         T: Clone,

@@ -12,6 +12,7 @@ pub struct LfoOsc {
 }
 
 impl LfoOsc {
+    #[must_use] 
     pub fn new(wave: Wave, rate_hz: f32, sample_rate: u32) -> Self {
         let mut osc = Self {
             wave,

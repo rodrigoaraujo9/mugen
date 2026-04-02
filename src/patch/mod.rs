@@ -53,6 +53,7 @@ pub struct Patch {
 }
 
 impl Patch {
+    #[must_use] 
     pub fn new(osc: OscHandle, adsr: AdsrHandle, effects: Vec<SharedEffect>) -> Self {
         Self { osc, adsr, effects }
     }
@@ -69,6 +70,7 @@ impl Patch {
     }
 
     #[inline]
+    #[must_use] 
     pub fn wave(&self) -> Wave {
         self.osc.get().wave
     }
@@ -84,6 +86,7 @@ impl Patch {
     }
 
     #[inline]
+    #[must_use] 
     pub fn adsr(&self) -> Adsr {
         self.adsr.get()
     }
@@ -94,6 +97,7 @@ impl Patch {
     }
 
     #[inline]
+    #[must_use] 
     pub fn name(&self) -> String {
         let mut out = self.wave().name().to_string();
 

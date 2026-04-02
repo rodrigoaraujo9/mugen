@@ -27,12 +27,13 @@ pub struct State {
 }
 
 impl State {
+    #[must_use] 
     pub fn from_snapshot(snapshot: Snapshot) -> Self {
         let osc = make_osc(snapshot.wave);
         let adsr = make_adsr(snapshot.adsr);
         let gain = make_gain(snapshot.gain.amount);
         let lfo_amp = make_lfo_amp(snapshot.lfo_amp);
-        let lowpass = make_lowpass(snapshot.lowpass);
+        let lowpass = make_lowpass(&snapshot.lowpass);
 
         let effects: Vec<SharedEffect> = vec![
             Arc::new(gain.clone()),
@@ -57,6 +58,7 @@ impl State {
     }
 
     #[inline]
+    #[must_use] 
     pub fn wave(&self) -> Wave {
         self.osc.get().wave
     }
@@ -72,6 +74,7 @@ impl State {
     }
 
     #[inline]
+    #[must_use] 
     pub fn adsr(&self) -> Adsr {
         self.adsr.get()
     }
@@ -82,6 +85,7 @@ impl State {
     }
 
     #[inline]
+    #[must_use] 
     pub fn gain(&self) -> Gain {
         self.gain.get()
     }
@@ -92,6 +96,7 @@ impl State {
     }
 
     #[inline]
+    #[must_use] 
     pub fn lfo_amp(&self) -> LfoAmp {
         self.lfo_amp.get()
     }
@@ -102,6 +107,7 @@ impl State {
     }
 
     #[inline]
+    #[must_use] 
     pub fn lowpass(&self) -> LowPass {
         self.lowpass.get()
     }
@@ -112,6 +118,7 @@ impl State {
     }
 
     #[inline]
+    #[must_use] 
     pub fn snapshot(&self) -> Snapshot {
         Snapshot {
             volume: self.volume,
