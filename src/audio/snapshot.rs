@@ -24,6 +24,7 @@ pub struct Snapshot {
 }
 
 impl Snapshot {
+    #[must_use]
     pub fn default() -> Self {
         Self {
             volume: 1.0,

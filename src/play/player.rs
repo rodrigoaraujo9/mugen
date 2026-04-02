@@ -16,7 +16,7 @@ pub struct Player {
 }
 
 impl Player {
-    pub fn new() -> Result<Self, Box<dyn Error>> {
+    pub fn new() -> Result<Self, Box<dyn Error + Send + Sync>> {
         Ok(Self {
             stream: OutputStreamBuilder::open_default_stream()?,
             voices: HashMap::new(),

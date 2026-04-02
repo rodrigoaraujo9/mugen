@@ -2,7 +2,11 @@
 
 use crate::audio::{Client, Command, Snapshot};
 use device_query::Keycode;
-use std::collections::HashSet;
+use std::{
+    collections::HashSet,
+    error::Error,
+    io::{Error as IoError, ErrorKind},
+};
 use tokio::sync::{Mutex, OnceCell, mpsc, watch};
 
 pub struct Bus {
@@ -34,24 +38,30 @@ pub async fn client() -> &'static Client {
         .client
 }
 
-pub async fn take_runtime_channels() -> (
-    mpsc::UnboundedReceiver<Command>,
-    watch::Sender<Snapshot>,
-    watch::Sender<HashSet<Keycode>>,
-    Snapshot,
-) {
+pub async fn take_runtime_channels() -> Result<
+    (
+        mpsc::UnboundedReceiver<Command>,
+        watch::Sender<Snapshot>,
+        watch::Sender<HashSet<Keycode>>,
+        Snapshot,
+    ),
+    Box<dyn Error + Send + Sync>,
+> {
     let bus = AUDIO
-        .get_or_init(|| async { unreachable!("call audio::client() first") })
-        .await;
+        .get()
+        .ok_or_else(|| IoError::new(ErrorKind::NotFound, "call audio::client() first"))?;
 
     let mut commands = bus.commands.lock().await;
-    let cmd_rx = commands.take().expect("audio engine already taken");
+    let cmd_rx = commands
+        .take()
+        .ok_or_else(|| IoError::new(ErrorKind::AlreadyExists, "audio engine already taken"))?;
+
     let snapshot = bus.snapshot_tx.borrow().clone();
 
-    (
+    Ok((
         cmd_rx,
         bus.snapshot_tx.clone(),
         bus.held_keys_tx.clone(),
         snapshot,
-    )
+    ))
 }

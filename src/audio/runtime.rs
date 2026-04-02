@@ -7,6 +7,7 @@ use crate::play::Player;
 use crate::play::key::Key;
 use device_query::{DeviceQuery, DeviceState, Keycode};
 use rodio::Sink;
+use std::error::Error;
 use std::{
     collections::HashSet,
     sync::{
@@ -65,12 +66,19 @@ fn toggle_wave(state: &State) {
 pub async fn run(
     mut shutdown: tokio::sync::watch::Receiver<bool>,
     focused: Arc<AtomicBool>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn Error + Send + Sync>> {
     let _ = audio::client().await;
-    let (mut cmd_rx, snapshot_tx, held_keys_tx, initial) = audio::take_runtime_channels().await;
+    let (mut cmd_rx, snapshot_tx, held_keys_tx, initial) =
+        match audio::take_runtime_channels().await {
+            Ok(a) => a,
+            Err(e) => return Err(e),
+        };
 
     let mut state = State::from_snapshot(initial);
-    let mut player = Player::new()?;
+    let mut player = match Player::new() {
+        Ok(a) => a,
+        Err(e) => return Err(e),
+    };
     publish_snapshot(&snapshot_tx, &state);
 
     let stop_flag = Arc::new(AtomicBool::new(false));
