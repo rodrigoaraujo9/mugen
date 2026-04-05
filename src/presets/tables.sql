@@ -63,15 +63,15 @@ create index idx_presets_wave_id on presets(wave_id);
 create index idx_presets_lfo_wave_id on presets(lfo_wave_id);
 
 insert into categories (id, name) values
-(1, 'Bass'),
-(2, 'Plucks'),
-(3, 'Leads'),
-(4, 'Bells'),
-(5, 'Keys'),
-(6, 'Pads'),
-(7, 'Drums'),
-(8, 'Soundscapes'),
-(9, 'Effects');
+(0, 'Bass'),
+(1, 'Plucks'),
+(2, 'Leads'),
+(3, 'Bells'),
+(4, 'Keys'),
+(5, 'Pads'),
+(6, 'Drums'),
+(7, 'Soundscapes'),
+(8, 'Effects');
 
 insert into waves (id, name) values
 (0, 'Sine'),

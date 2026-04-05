@@ -11,4 +11,5 @@ fundsp = "0.23.0"
 futures-util = "0.3.31"
 ratatui = "0.30.0"
 rodio = "0.21.1"
+rusqlite = { version = "0.39.0", features = ["bundled"] }
 tokio = {version ="1.49.0", features = ["full"]}
