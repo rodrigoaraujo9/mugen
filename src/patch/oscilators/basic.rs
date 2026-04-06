@@ -4,21 +4,24 @@ use crate::config::{AMP_DEFAULT, SAMPLE_RATE};
 use crate::patch::Sample;
 use crate::patch::shared::Shared;
 use rodio::Source;
+use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ValueRef};
+use std::error::Error;
 use std::f32::consts::TAU;
 use std::time::Duration;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[repr(u32)]
 pub enum Wave {
-    Sine,
-    Saw,
-    Square,
-    Triangle,
-    Noise,
+    Sine = 0,
+    Saw = 1,
+    Square = 2,
+    Triangle = 3,
+    Noise = 4,
 }
 
 impl Wave {
     #[inline]
-    #[must_use] 
+    #[must_use]
     pub fn toggle(&self) -> Self {
         match self {
             Self::Sine => Self::Saw,
@@ -30,7 +33,7 @@ impl Wave {
     }
 
     #[inline]
-    #[must_use] 
+    #[must_use]
     pub fn name(&self) -> &'static str {
         match self {
             Self::Sine => "Sine",
@@ -39,6 +42,30 @@ impl Wave {
             Self::Triangle => "Triangle",
             Self::Noise => "Noise",
         }
+    }
+}
+
+impl TryFrom<u32> for Wave {
+    type Error = &'static str;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Self::Sine),
+            1 => Ok(Self::Saw),
+            2 => Ok(Self::Square),
+            3 => Ok(Self::Triangle),
+            4 => Ok(Self::Noise),
+            _ => Err("invalid wave id"),
+        }
+    }
+}
+
+impl FromSql for Wave {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        let id_i64 = value.as_i64()?;
+        let id = u32::try_from(id_i64).map_err(|_| FromSqlError::OutOfRange(id_i64))?;
+
+        Wave::try_from(id).map_err(|_| FromSqlError::InvalidType)
     }
 }
 
@@ -62,7 +89,7 @@ impl Default for Osc {
 pub type OscHandle = Shared<Osc>;
 
 #[inline]
-#[must_use] 
+#[must_use]
 pub fn make_osc(wave: Wave) -> OscHandle {
     Shared::new(Osc {
         wave,
@@ -71,7 +98,7 @@ pub fn make_osc(wave: Wave) -> OscHandle {
 }
 
 #[inline]
-#[must_use] 
+#[must_use]
 pub fn osc_source(frequency: f32, osc: OscHandle) -> OscSource {
     OscSource::new(frequency, osc)
 }
@@ -84,7 +111,7 @@ pub struct OscSource {
 }
 
 impl OscSource {
-    #[must_use] 
+    #[must_use]
     pub fn new(frequency: f32, osc: OscHandle) -> Self {
         Self {
             osc,

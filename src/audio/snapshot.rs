@@ -9,6 +9,7 @@ use crate::patch::effects::gain::Gain;
 use crate::patch::effects::lfo_amp::LfoAmp;
 use crate::patch::effects::lowpass::LowPass;
 use crate::patch::oscilators::basic::Wave;
+use crate::presets::Preset;
 
 #[derive(Debug, Clone)]
 pub struct Snapshot {
@@ -41,6 +42,26 @@ impl Snapshot {
                 base_gain: 1.0,
             },
             lowpass: LowPass { cutoff_hz: CUTOFF },
+        }
+    }
+    pub fn from_preset(preset: Preset) -> Self {
+        Self {
+            volume: 1.0,
+            muted: false,
+            wave: preset.wave,
+            octave: preset.octave_shift,
+            patch_name: preset.name,
+            adsr: Adsr::new(preset.attack, preset.decay, preset.sustain, preset.release),
+            gain: Gain { amount: 1.0 },
+            lfo_amp: LfoAmp {
+                wave: preset.lfo_wave,
+                rate_hz: preset.lfo_rate,
+                depth: preset.lfo_depth,
+                base_gain: 1.0,
+            },
+            lowpass: LowPass {
+                cutoff_hz: preset.cutoff,
+            },
         }
     }
 }
