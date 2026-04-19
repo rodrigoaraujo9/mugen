@@ -38,3 +38,11 @@ The current architecture keeps the patch modular while allowing the audio chain 
 - crossterm
 - tokio
 - sqlite
+
+## Latest Feature
+
+The synth now supports presets. You can easily mess around with them through the presets browser (press 'space'). They are organized by category and are loaded from a local sqlite database.
+
+<div align="center">
+    <img src="./assets/presets.png" alt="Presets Browser">
+</div>
