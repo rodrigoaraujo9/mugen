@@ -3,16 +3,19 @@ adicionar suporte de presets
 usar uma base de dados sqlite3 para os presets
 
 2.
-integrar visualização de waveform
+ring buf em vez de locks para o polling e atualização do state
 
 3.
+integrar visualização de waveform
+
+4.
 adicionar Mono/Poly/Legato/Arpeggio(Choose rate)
           Unison?   Sample Rate ou Heavy Distortion (Trash button)
 
-4.
+5.
 tocar ficheiros Midi com a configuração selecionada
 
-5.
+6.
 record button
 
 145-31 aspetct ratio for prints

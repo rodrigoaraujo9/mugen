@@ -5,7 +5,6 @@ use crate::patch::Sample;
 use crate::patch::shared::Shared;
 use rodio::Source;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ValueRef};
-use std::error::Error;
 use std::f32::consts::TAU;
 use std::time::Duration;
 

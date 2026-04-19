@@ -17,8 +17,11 @@ pub struct Player {
 
 impl Player {
     pub fn new() -> Result<Self, Box<dyn Error + Send + Sync>> {
+        let mut stream = OutputStreamBuilder::open_default_stream()?;
+        stream.log_on_drop(false);
+
         Ok(Self {
-            stream: OutputStreamBuilder::open_default_stream()?,
+            stream,
             voices: HashMap::new(),
         })
     }

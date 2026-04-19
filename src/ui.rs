@@ -1,7 +1,7 @@
 use std::{
     collections::HashSet,
-    io,
-    io::stdout,
+    error::Error,
+    io::{self, stdout},
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -26,7 +26,7 @@ use ratatui::{
     prelude::Stylize,
     style::Style,
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Paragraph, Wrap},
+    widgets::{Block, Borders, Clear, Paragraph, Row, Table, Wrap},
 };
 use tokio::sync::{mpsc, watch};
 use tokio::time::sleep;
@@ -36,6 +36,7 @@ use crate::patch::effects::adsr::Adsr;
 use crate::patch::effects::lfo_amp::LfoAmp;
 use crate::patch::effects::lowpass::LowPass;
 use crate::patch::oscilators::basic::Wave;
+use crate::presets::{Preset, import_db};
 
 const INTRO_MIN_W: u16 = 136;
 const INTRO_MIN_H: u16 = 25;
@@ -43,6 +44,18 @@ const UI_MIN_W: u16 = 136;
 const UI_MIN_H: u16 = 33;
 const KEYBOARD_MIN_W: u16 = 18;
 const KEYBOARD_MIN_H: u16 = 6;
+
+const PRESET_CATEGORIES: [(u32, &str); 9] = [
+    (0, "Bass"),
+    (1, "Plucks"),
+    (2, "Leads"),
+    (3, "Bells"),
+    (4, "Keys"),
+    (5, "Pads"),
+    (6, "Drums"),
+    (7, "Soundscapes"),
+    (8, "Effects"),
+];
 
 #[allow(dead_code)]
 mod kdr {
@@ -165,6 +178,11 @@ impl LowPassParam {
 struct UiState {
     pane: Pane,
 
+    presets: Vec<Preset>,
+    preset_category_idx: usize,
+    preset_row_idx: usize,
+    show_presets: bool,
+
     waves: [Wave; 5],
     wave_idx: usize,
 
@@ -189,7 +207,7 @@ struct UiState {
 
 impl UiState {
     #[must_use]
-    fn new(snapshot: Snapshot) -> Self {
+    fn new(snapshot: Snapshot, presets: Vec<Preset>) -> Self {
         let waves = [
             Wave::Sine,
             Wave::Saw,
@@ -202,6 +220,11 @@ impl UiState {
 
         Self {
             pane: Pane::Waveforms,
+
+            presets,
+            preset_category_idx: 0,
+            preset_row_idx: 0,
+            show_presets: false,
 
             waves,
             wave_idx,
@@ -223,6 +246,22 @@ impl UiState {
             held_keys: HashSet::new(),
             octave: snapshot.octave,
         }
+    }
+
+    #[must_use]
+    fn presets_in_selected_category(&self) -> Vec<&Preset> {
+        let category_id = PRESET_CATEGORIES[self.preset_category_idx].0;
+
+        self.presets
+            .iter()
+            .filter(|preset| preset.category_id == category_id)
+            .collect()
+    }
+
+    #[must_use]
+    fn selected_preset(&self) -> Option<&Preset> {
+        let presets = self.presets_in_selected_category();
+        presets.get(self.preset_row_idx).copied()
     }
 
     #[must_use]
@@ -269,7 +308,7 @@ pub async fn run_ui(
     client: Client,
     shutdown_tx: watch::Sender<bool>,
     focused: Arc<AtomicBool>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn Error + Send + Sync>> {
     let mut stdout = stdout();
 
     enable_raw_mode()?;
@@ -281,7 +320,14 @@ pub async fn run_ui(
     terminal.clear()?;
 
     let initial = client.subscribe().borrow().clone();
-    let mut ui = UiState::new(initial);
+    let presets = match import_db().await {
+        Ok(presets) => presets,
+        Err(err) => {
+            eprintln!("failed to load presets: {err}");
+            Vec::new()
+        }
+    };
+    let mut ui = UiState::new(initial, presets);
 
     let (key_tx, mut key_rx) = mpsc::unbounded_channel::<KeyEvent>();
 
@@ -323,9 +369,22 @@ pub async fn run_ui(
                     continue;
                 }
 
-                if matches!(key.code, KeyCode::Tab) {
-                    ui.pane = ui.pane.next();
+                if ui.show_presets {
+                    handle_presets_popup(&mut ui, &client, &key);
                     continue;
+                }
+
+                match key.code {
+                    KeyCode::Char(' ') => {
+                        ui.show_presets = true;
+                        ui.preset_row_idx = 0;
+                        continue;
+                    }
+                    KeyCode::Tab => {
+                        ui.pane = ui.pane.next();
+                        continue;
+                    }
+                    _ => {}
                 }
 
                 match ui.pane {
@@ -378,7 +437,7 @@ fn draw_frame(
     terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     ui: &UiState,
     show_intro: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn Error + Send + Sync>> {
     if show_intro {
         terminal.draw(draw_intro)?;
     } else {
@@ -392,6 +451,86 @@ fn draw_frame(
 fn should_quit(key: &KeyEvent) -> bool {
     (key.modifiers.contains(KeyModifiers::CONTROL) && matches!(key.code, KeyCode::Char('c')))
         || matches!(key.code, KeyCode::Char('q'))
+}
+
+fn apply_selected_preset(ui: &mut UiState, client: &Client) {
+    let Some(preset) = ui.selected_preset().cloned() else {
+        return;
+    };
+
+    ui.patch_name = preset.name.clone();
+    ui.wave = preset.wave.clone();
+    ui.sync_wave_idx();
+
+    ui.adsr.attack_s = preset.attack;
+    ui.adsr.decay_s = preset.decay;
+    ui.adsr.sustain = preset.sustain;
+    ui.adsr.release_s = preset.release;
+
+    ui.lfo.wave = preset.lfo_wave.clone();
+    ui.lfo.rate_hz = preset.lfo_rate;
+    ui.lfo.depth = preset.lfo_depth;
+
+    ui.lowpass.cutoff_hz = preset.cutoff;
+    ui.octave = preset.octave_shift;
+
+    client.set_wave(preset.wave);
+    client.set_adsr(ui.adsr.clone());
+    client.set_lfo_amp(ui.lfo.clone());
+    client.set_lowpass(ui.lowpass.clone());
+    client.set_octave(ui.octave);
+}
+
+fn handle_presets_popup(ui: &mut UiState, client: &Client, key: &KeyEvent) {
+    match key.code {
+        KeyCode::Char(' ') | KeyCode::Esc => {
+            ui.show_presets = false;
+        }
+
+        KeyCode::Tab | KeyCode::Right => {
+            ui.preset_category_idx = (ui.preset_category_idx + 1) % PRESET_CATEGORIES.len();
+            let len = ui.presets_in_selected_category().len();
+            if len == 0 {
+                ui.preset_row_idx = 0;
+            } else if ui.preset_row_idx >= len {
+                ui.preset_row_idx = len - 1;
+            }
+        }
+
+        KeyCode::Left => {
+            ui.preset_category_idx = if ui.preset_category_idx == 0 {
+                PRESET_CATEGORIES.len() - 1
+            } else {
+                ui.preset_category_idx - 1
+            };
+            let len = ui.presets_in_selected_category().len();
+            if len == 0 {
+                ui.preset_row_idx = 0;
+            } else if ui.preset_row_idx >= len {
+                ui.preset_row_idx = len - 1;
+            }
+        }
+
+        KeyCode::Up => {
+            if ui.preset_row_idx > 0 {
+                ui.preset_row_idx -= 1;
+            }
+        }
+
+        KeyCode::Down => {
+            let len = ui.presets_in_selected_category().len();
+            if ui.preset_row_idx + 1 < len {
+                ui.preset_row_idx += 1;
+            }
+        }
+
+        KeyCode::Enter => {
+            apply_selected_preset(ui, client);
+            ui.show_presets = false;
+        }
+
+        _ => {}
+    }
 }
 
 fn handle_waveforms(ui: &mut UiState, client: &Client, key: &KeyEvent) {
@@ -426,8 +565,6 @@ fn handle_adsr(ui: &mut UiState, client: &Client, key: &KeyEvent) {
 
 fn handle_mod(ui: &mut UiState, client: &Client, key: &KeyEvent) {
     match key.code {
-        KeyCode::Char(' ') => ui.mod_tab = ui.mod_tab.next(),
-
         KeyCode::Up => match ui.mod_tab {
             ModTab::Lfo if ui.lfo_param_idx > 0 => ui.lfo_param_idx -= 1,
             ModTab::LowPass if ui.lowpass_param_idx > 0 => ui.lowpass_param_idx -= 1,
@@ -463,6 +600,10 @@ fn handle_mod(ui: &mut UiState, client: &Client, key: &KeyEvent) {
                 client.set_lowpass(ui.lowpass.clone());
             }
         },
+
+        KeyCode::Enter => {
+            ui.mod_tab = ui.mod_tab.next();
+        }
 
         _ => {}
     }
@@ -696,6 +837,10 @@ fn draw_ui(f: &mut ratatui::Frame, ui: &UiState) {
     draw_mod(f, right[1], ui);
     draw_keyboard(f, rows[1], ui);
     draw_help(f, help_area, ui);
+
+    if ui.show_presets {
+        draw_presets_popup(f, ui);
+    }
 }
 
 fn draw_too_small(f: &mut ratatui::Frame, area: Rect, min_w: u16, min_h: u16) {
@@ -911,6 +1056,191 @@ fn draw_mod(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
             .alignment(Alignment::Left)
             .style(panel_style(focused)),
         inner,
+    );
+}
+fn draw_presets_popup(f: &mut ratatui::Frame, ui: &UiState) {
+    let area = centered_rect(f.area(), 82, 72);
+    f.render_widget(Clear, area);
+
+    let outer = Block::default()
+        .borders(Borders::ALL)
+        .title(Span::styled(
+            " Presets ",
+            Style::default().fg(kdr::ORANGE).bold(),
+        ))
+        .border_style(Style::default().fg(kdr::FG))
+        .style(Style::default().bg(kdr::BG0));
+
+    let inner = outer.inner(area);
+    f.render_widget(outer, area);
+
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Min(8),
+            Constraint::Length(2),
+        ])
+        .split(inner);
+
+    let tabs_area = layout[0];
+    let table_area = layout[1];
+    let footer_area = layout[2];
+
+    draw_preset_tabs(f, tabs_area, ui);
+    draw_preset_table(f, table_area, ui);
+    draw_preset_footer(f, footer_area);
+}
+
+fn draw_preset_table(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
+    let category_name = PRESET_CATEGORIES[ui.preset_category_idx].1;
+    let category_presets = ui.presets_in_selected_category();
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(kdr::BORDER))
+        .style(Style::default().bg(kdr::BG0));
+
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
+    let header = Row::new(vec![
+        Line::from(vec![
+            Span::styled("  ", Style::default().fg(kdr::MUTED)),
+            Span::styled(
+                category_name,
+                Style::default().fg(kdr::ORANGE).bold(),
+            ),
+        ]),
+        Line::from(Span::styled(
+            "Wave",
+            Style::default().fg(kdr::ORANGE).bold(),
+        )),
+        Line::from(Span::styled(
+            "Oct",
+            Style::default().fg(kdr::ORANGE).bold(),
+        )),
+        Line::from(Span::styled(
+            "Cutoff",
+            Style::default().fg(kdr::ORANGE).bold(),
+        )),
+    ]);
+
+    let rows: Vec<Row> = if category_presets.is_empty() {
+        vec![Row::new(vec![
+            Line::from(Span::styled("—", Style::default().fg(kdr::MUTED))),
+            Line::from(""),
+            Line::from(""),
+            Line::from(""),
+        ])]
+    } else {
+        category_presets
+            .iter()
+            .enumerate()
+            .map(|(i, preset)| {
+                let selected = i == ui.preset_row_idx;
+
+                let preset_cell = if selected {
+                    Line::from(vec![
+                        Span::styled("› ", Style::default().fg(kdr::ORANGE).bold()),
+                        Span::styled(
+                            preset.name.clone(),
+                            Style::default().fg(kdr::FG).bold(),
+                        ),
+                    ])
+                } else {
+                    Line::from(vec![
+                        Span::styled("  ", Style::default().fg(kdr::MUTED)),
+                        Span::styled(
+                            preset.name.clone(),
+                            Style::default().fg(kdr::FG),
+                        ),
+                    ])
+                };
+
+                let value_style = if selected {
+                    Style::default().fg(kdr::FG).bold()
+                } else {
+                    Style::default().fg(kdr::FG)
+                };
+
+                Row::new(vec![
+                    preset_cell,
+                    Line::from(Span::styled(preset.wave.name().to_string(), value_style)),
+                    Line::from(Span::styled(format!("{:+}", preset.octave_shift), value_style)),
+                    Line::from(Span::styled(format!("{:.0}", preset.cutoff), value_style)),
+                ])
+            })
+            .collect()
+    };
+
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Percentage(52),
+            Constraint::Percentage(16),
+            Constraint::Percentage(10),
+            Constraint::Percentage(22),
+        ],
+    )
+    .header(header)
+    .column_spacing(1)
+    .style(Style::default().bg(kdr::BG0))
+    .block(Block::default());
+
+    f.render_widget(table, inner);
+}
+fn draw_preset_tabs(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
+    let spans: Vec<Span> = PRESET_CATEGORIES
+        .iter()
+        .enumerate()
+        .flat_map(|(i, (_, name))| {
+            let selected = i == ui.preset_category_idx;
+
+            let tab = if selected {
+                Span::styled(
+                    format!(" {name} "),
+                    Style::default().fg(kdr::BG0).bg(kdr::ORANGE).bold(),
+                )
+            } else {
+                Span::styled(
+                    format!(" {name} "),
+                    Style::default().fg(kdr::MUTED).bg(kdr::BG0),
+                )
+            };
+
+            let sep = Span::raw(" ");
+            [tab, sep]
+        })
+        .collect();
+
+    f.render_widget(
+        Paragraph::new(Line::from(spans))
+            .alignment(Alignment::Center)
+            .style(Style::default().bg(kdr::BG0)),
+        area,
+    );
+}
+
+fn draw_preset_footer(f: &mut ratatui::Frame, area: Rect) {
+    let line = Line::from(vec![
+        Span::styled("Tab", Style::default().fg(kdr::ORANGE).bold()),
+        Span::styled(" next section  ", Style::default().fg(kdr::MUTED)),
+        Span::styled("←/→", Style::default().fg(kdr::ORANGE).bold()),
+        Span::styled(" section  ", Style::default().fg(kdr::MUTED)),
+        Span::styled("↑/↓", Style::default().fg(kdr::ORANGE).bold()),
+        Span::styled(" preset  ", Style::default().fg(kdr::MUTED)),
+        Span::styled("Enter", Style::default().fg(kdr::ORANGE).bold()),
+        Span::styled(" load  ", Style::default().fg(kdr::MUTED)),
+        Span::styled("Esc", Style::default().fg(kdr::ORANGE).bold()),
+        Span::styled(" close", Style::default().fg(kdr::MUTED)),
+    ]);
+
+    f.render_widget(
+        Paragraph::new(line)
+            .alignment(Alignment::Center)
+            .style(Style::default().bg(kdr::BG0)),
+        area,
     );
 }
 
@@ -1203,40 +1533,65 @@ fn draw_keyboard_black_keys(
 }
 
 fn draw_help(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
-    let focus_name = match ui.pane {
-        Pane::Waveforms => "Waveforms",
-        Pane::Adsr => "ADSR",
-        Pane::Mod => match ui.mod_tab {
-            ModTab::Lfo => "LFO",
-            ModTab::LowPass => "LowPass",
-        },
-        Pane::Keyboard => "Keyboard",
+    let focus_name = if ui.show_presets {
+        "Presets"
+    } else {
+        match ui.pane {
+            Pane::Waveforms => "Waveforms",
+            Pane::Adsr => "ADSR",
+            Pane::Mod => match ui.mod_tab {
+                ModTab::Lfo => "LFO",
+                ModTab::LowPass => "LowPass",
+            },
+            Pane::Keyboard => "Keyboard",
+        }
     };
 
     let key_style = Style::default().fg(kdr::ORANGE).bold();
     let dim = Style::default().fg(kdr::MUTED);
     let strong = Style::default().fg(kdr::FG).bold();
 
-    let line1 = Line::from(vec![
-        Span::styled("Tab", key_style),
-        Span::styled(" focus  ", dim),
-        Span::styled("Space", key_style),
-        Span::styled(" toggle mod  ", dim),
-        Span::styled("↑/↓", key_style),
-        Span::styled(" select  ", dim),
-        Span::styled("←/→", key_style),
-        Span::styled(" change  ", dim),
-        Span::styled("q", key_style),
-        Span::styled(" quit  ", dim),
-        Span::styled("Ctrl+C", key_style),
-        Span::styled(" quit", dim),
-    ]);
+    let line1 = if ui.show_presets {
+        Line::from(vec![
+            Span::styled("Tab", key_style),
+            Span::styled(" section  ", dim),
+            Span::styled("←/→", key_style),
+            Span::styled(" section  ", dim),
+            Span::styled("↑/↓", key_style),
+            Span::styled(" preset  ", dim),
+            Span::styled("Enter", key_style),
+            Span::styled(" load  ", dim),
+            Span::styled("Esc", key_style),
+            Span::styled(" close  ", dim),
+            Span::styled("q", key_style),
+            Span::styled(" quit", dim),
+        ])
+    } else {
+        Line::from(vec![
+            Span::styled("Space", key_style),
+            Span::styled(" presets  ", dim),
+            Span::styled("Tab", key_style),
+            Span::styled(" focus  ", dim),
+            Span::styled("↑/↓", key_style),
+            Span::styled(" select  ", dim),
+            Span::styled("←/→", key_style),
+            Span::styled(" change  ", dim),
+            Span::styled("Enter", key_style),
+            Span::styled(" toggle mod tab  ", dim),
+            Span::styled("q", key_style),
+            Span::styled(" quit  ", dim),
+            Span::styled("Ctrl+C", key_style),
+            Span::styled(" quit", dim),
+        ])
+    };
 
     let line2 = Line::from(vec![
         Span::styled("Focus: ", dim),
         Span::styled(focus_name, strong),
-        Span::styled("  |  Wave: ", dim),
+        Span::styled("  |  Patch: ", dim),
         Span::styled(ui.patch_name.clone(), strong),
+        Span::styled("  |  Wave: ", dim),
+        Span::styled(ui.wave.name().to_string(), strong),
         Span::styled("  |  LP ", dim),
         Span::styled(format!("{:.0}Hz", ui.lowpass.cutoff_hz), strong),
         Span::styled("  |  Vol ", dim),
@@ -1263,6 +1618,29 @@ fn draw_help(f: &mut ratatui::Frame, area: Rect, ui: &UiState) {
             .style(Style::default().bg(kdr::BG0)),
         area,
     );
+}
+
+#[must_use]
+fn centered_rect(area: Rect, percent_x: u16, percent_y: u16) -> Rect {
+    let vertical = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(area);
+
+    let horizontal = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(vertical[1]);
+
+    horizontal[1]
 }
 
 #[must_use]

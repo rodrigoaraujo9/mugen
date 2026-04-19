@@ -4,7 +4,7 @@ use rusqlite::Connection;
 
 use crate::patch::oscilators::basic::Wave;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Preset {
     pub id: u32,
     pub name: String,
@@ -22,11 +22,11 @@ pub struct Preset {
 }
 
 pub async fn import_db() -> Result<Vec<Preset>, Box<dyn Error + Send + Sync>> {
-    let conn = Connection::open("db.sqlite")?;
+    let conn = Connection::open("./bin/db.sqlite")?;
 
     let mut stmt = conn.prepare(
         "SELECT id, name, category_id, octave_shift, wave_id, attack, decay, sustain, release,
-                lfo_wave_id, lfo_rate, lfo_depth
+                lfo_wave_id, lfo_rate, lfo_depth, cutoff
          FROM presets",
     )?;
 
